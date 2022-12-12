@@ -2,6 +2,8 @@
 This is the official Pytorch implementation of my paper:
 ["Weakly-supervised Biomechanically-constrained CT/MRI Registration of the Spine" (MICCAI 2022)](https://arxiv.org/abs/2205.07568)
 
+The training and inference scripts will soon be available.
+
 ---
 ## Prerequisites
 - `Python 3.8.8`

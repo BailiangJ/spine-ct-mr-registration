@@ -8,11 +8,13 @@ from scipy.spatial.transform import Rotation as Rot
 
 
 def get_reference_grid(image_size: Union[Tuple[int], List[int]]) -> torch.Tensor:
+    """
+    Generate a unnormalized coordinate grid
+    Args:
+        image_size: shape of input image, e.g. (64,128,128)
+    """
     mesh_points = [torch.arange(0, dim) for dim in image_size]
     grid = torch.stack(torch.meshgrid(*mesh_points), dim=0).to(dtype=torch.float)  # (spatial_dims, ...)
-    # # normalize grid values to [-1, 1]
-    # for i in range(len(image_size)):
-    #     grid[i, ...] = 2 * (grid[i, ...] / (image_size[i] - 1) - 0.5)
     return grid
 
 
@@ -29,9 +31,11 @@ def solve_SVD(fixed_pnts: torch.Tensor, moving_pnts: torch.Tensor, fixed_cm: tor
         R: torch.Tensor, rotation matrix
         t: torch.Tensor, translation vector
     """
+    # demean the point clouds
     fixed_cm_rw = fixed_pnts - fixed_cm
     moving_cm_rw = moving_pnts - moving_cm
 
+    # solve rotation and translation with SVD
     H = fixed_cm_rw @ moving_cm_rw.T
     U, S, Vt = torch.linalg.svd(H, full_matrices=True)
 
@@ -44,10 +48,54 @@ def solve_SVD(fixed_pnts: torch.Tensor, moving_pnts: torch.Tensor, fixed_cm: tor
     return R, t
 
 
+def sample_correspondence(label_map: torch.Tensor, flow: torch.Tensor) -> torch.Tensor:
+    """
+    Sample correspondence between fixed and moving images
+    Args:
+        label_map: (soft) one-hot label mask of fixed image, tensor of shape BNHWD, with B=1
+        flow: dense displacement field mapping from fixed image to moving image
+
+    Returns:
+        two corresponding point clouds
+        src_pnts_list:
+        dst_pnts_list:
+    """
+    num_ch = label_map.shape[1]
+    src_pnts_list = []
+    des_pnts_list = []
+    for ch in range(num_ch):
+        # sample a set of points in (soft) one-hot label of fixed image
+        valid_points = (label_map[0, ch] >= 0.5).nonzero()
+
+        valid_len = valid_points.shape[0]
+        indices = torch.randint(valid_len, [self.num_samples]).to(self._device)
+
+        src_pnts = torch.index_select(valid_points.float(), 0, indices)
+
+        sample_grid = src_pnts.detach().clone()
+
+        sample_flow = sample_displacement_flow(sample_grid, flow, self._image_size)
+        sample_flow = sample_flow.squeeze()
+
+        # (3, num_samples)
+        src_pnts = src_pnts.transpose(0, 1)
+        des_pnts = src_pnts + sample_flow
+
+        src_pnts_list.append(src_pnts)
+        des_pnts_list.append(des_pnts)
+
+    return src_pnts_list, des_pnts_list
+
+
 def sample_displacement_flow(sample_grid: torch.Tensor, flow: torch.Tensor,
                              image_size: Union[List[int], Tuple[int, ...]]) -> torch.Tensor:
     """
-    Sample displacement flow at certain locations
+    Sample 3D displacement flow at certain locations
+
+    TODO: adapt it to be compatiable with 2D images
+
+    reference: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+
     Args:
         sample_grid: torch.Tensor, shape (num_samples, 3), coordinate of sampling locations
         flow: torch.Tensor, shape 3,HWD, dense displacement field
@@ -55,18 +103,19 @@ def sample_displacement_flow(sample_grid: torch.Tensor, flow: torch.Tensor,
 
     Returns:
         sample_flow: torch.Tensor, sampled displacement vectors
-
     """
     _dim = len(image_size)
 
     # normalize
+    # F.grid_sample takes normalized grid with range at [-1,1]
     for i, dim in enumerate(image_size):
         sample_grid[..., i] = sample_grid[..., i] * 2 / (dim - 1) - 1
 
     index_ordering: List[int] = list(range(_dim - 1, -1, -1))
+    # F.grid_sample takes grid in a different order
     sample_grid = sample_grid[..., index_ordering]  # x,y,z -> z,y,x
     # reshape to (1,1,1,num_samples,3) for grid_sample
-    sample_grid = sample_grid.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+    sample_grid = sample_grid[None, None, None, ...]
 
     sample_flow = F.grid_sample(flow, sample_grid, mode='nearest', padding_mode='zeros', align_corners=True)
     return sample_flow
@@ -125,15 +174,6 @@ class RigidTransformation(nn.Module):
         self.register_buffer("grid", grid)
 
         self.center_mass_x, self.center_mass_y, self.center_mass_z = get_mass_center(moving_image, self.grid, self._dim)
-        # intensity_sum = torch.sum(moving_image, dim=list(range(1, self._dim + 1)))
-        # self.center_mass_x = torch.sum(moving_image * self.grid[0, ...],
-        #                                dim=list(range(1, self._dim + 1))) / intensity_sum
-        # self.center_mass_y = torch.sum(moving_image * self.grid[1, ...],
-        #                                dim=list(range(1, self._dim + 1))) / intensity_sum
-        # self.center_mass_z = torch.sum(moving_image * self.grid[2, ...],
-        #                                dim=list(range(1, self._dim + 1))) / intensity_sum
-
-        # print(f"moving:{[self.center_mass_x, self.center_mass_y, self.center_mass_z]}")
 
         self.phi_x = Parameter(torch.tensor([0.0] * self._num_ch))
         self.phi_y = Parameter(torch.tensor([0.0] * self._num_ch))
@@ -142,11 +182,6 @@ class RigidTransformation(nn.Module):
         self.t_x = Parameter(torch.tensor([0.0] * self._num_ch))
         self.t_y = Parameter(torch.tensor([0.0] * self._num_ch))
         self.t_z = Parameter(torch.tensor([0.0] * self._num_ch))
-
-        # if self.opt_cm:
-        #     self.center_mass_x = Parameter(self.center_mass_x)
-        #     self.center_mass_y = Parameter(self.center_mass_y)
-        #     self.center_mass_z = Parameter(self.center_mass_z)
 
         self.num_samples = num_samples
 
@@ -157,15 +192,6 @@ class RigidTransformation(nn.Module):
         fixed_image_center_mass_x, fixed_image_center_mass_y, fixed_image_center_mass_z = get_mass_center(fixed_image,
                                                                                                           self.grid,
                                                                                                           self._dim)
-
-        # intensity_sum = torch.sum(fixed_image, dim=list(range(1, self._dim + 1)))
-        #
-        # fixed_image_center_mass_x = torch.sum(fixed_image * self.grid[0, ...],
-        #                                       dim=list(range(1, self._dim + 1))) / intensity_sum
-        # fixed_image_center_mass_y = torch.sum(fixed_image * self.grid[1, ...],
-        #                                       dim=list(range(1, self._dim + 1))) / intensity_sum
-        # fixed_image_center_mass_z = torch.sum(fixed_image * self.grid[2, ...],
-        #                                       dim=list(range(1, self._dim + 1))) / intensity_sum
 
         self.t_x = Parameter(self.center_mass_x - fixed_image_center_mass_x)
         self.t_y = Parameter(self.center_mass_y - fixed_image_center_mass_y)
@@ -184,27 +210,14 @@ class RigidTransformation(nn.Module):
         Returns:
 
         """
-        fixed_pnts_list, moving_pnts_list = self.sample_correspondence(fixed_image, flow)
-        # moving_pnts_list, fixed_pnts_list = self.sample_correspondence(self.moving_image, flow)
+        fixed_pnts_list, moving_pnts_list = sample_correspondence(fixed_image, flow)
 
         fixed_image = fixed_image.squeeze(0)
         assert fixed_image.shape[1:] == self._image_size
         fixed_cm_list = get_mass_center(fixed_image,
-                                                                                                          self.grid,
-                                                                                                          self._dim)
+                                        self.grid,
+                                        self._dim)
 
-        # intensity_sum = torch.sum(fixed_image, dim=list(range(1, self._dim + 1)))
-        #
-        # fixed_image_center_mass_x = torch.sum(fixed_image * self.grid[0, ...],
-        #                                       dim=list(range(1, self._dim + 1))) / intensity_sum
-        # fixed_image_center_mass_y = torch.sum(fixed_image * self.grid[1, ...],
-        #                                       dim=list(range(1, self._dim + 1))) / intensity_sum
-        # fixed_image_center_mass_z = torch.sum(fixed_image * self.grid[2, ...],
-        #                                       dim=list(range(1, self._dim + 1))) / intensity_sum
-
-        # fixed_cm_list = torch.stack([fixed_image_center_mass_x,
-        #                              fixed_image_center_mass_y,
-        #                              fixed_image_center_mass_z], dim=0)
         moving_cm_list = torch.stack([self.center_mass_x,
                                       self.center_mass_y,
                                       self.center_mass_z], dim=0)
@@ -244,58 +257,10 @@ class RigidTransformation(nn.Module):
         self.t_x = Parameter(torch.tensor(t_x_list))
         self.t_y = Parameter(torch.tensor(t_y_list))
         self.t_z = Parameter(torch.tensor(t_z_list))
-        # self.t_x = Parameter(self.center_mass_x - fixed_image_center_mass_x)
-        # self.t_y = Parameter(self.center_mass_y - fixed_image_center_mass_y)
-        # self.t_z = Parameter(self.center_mass_z - fixed_image_center_mass_z)
-
-    def sample_correspondence(self, fixed_image, flow):
-        """
-        Sample correspondence between fixed and moving images
-        Args:
-            fixed_image: tensor of shape BNHWD, with B=1 （soft one-hot)
-            flow: dense displacement field mapping from fixed_image to moving_image
-
-        Returns:
-
-        """
-        fixed_pnts_list = []
-        moving_pnts_list = []
-        for ch in range(self._num_ch):
-            valid_points = (fixed_image[0, ch] >= 0.5).nonzero()
-
-            valid_len = valid_points.shape[0]
-            indices = torch.randint(valid_len, [self.num_samples]).to(self._device)
-
-            fixed_pnts = torch.index_select(valid_points.float(), 0, indices)
-
-            sample_grid = fixed_pnts.detach().clone()
-            # # normalize
-            # for i, dim in enumerate(self._image_size):
-            #     sample_grid[..., i] = sample_grid[..., i] * 2 / (dim - 1) - 1
-            # index_ordering: List[int] = list(range(self._dim - 1, -1, -1))
-            # sample_grid = sample_grid[..., index_ordering]  # x,y,z -> z,y,x
-            # # reshape to (1,1,1,num_samples,3) for grid_sample
-            # sample_grid = sample_grid.unsqueeze(0).unsqueeze(0).unsqueeze(0)
-            #
-            # sample_flow = F.grid_sample(flow, sample_grid, mode='nearest', padding_mode='zeros', align_corners=True)
-            sample_flow = sample_displacement_flow(sample_grid, flow, self._image_size)
-            sample_flow = sample_flow.squeeze()
-            # (3, num_samples)
-            fixed_pnts = fixed_pnts.transpose(0, 1)
-            moving_pnts = fixed_pnts + sample_flow
-
-            fixed_pnts_list.append(fixed_pnts)
-            moving_pnts_list.append(moving_pnts)
-
-        return fixed_pnts_list, moving_pnts_list
 
     def _compute_transformation_3d(self):
         self.trans_matrix_pos = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
                                                                                                     device=self._device)
-        # self.trans_matrix_cm = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
-        #                                                                                            device=self._device)
-        # self.trans_matrix_cm_rw = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
-        #                                                                                               device=self._device)
         rotation_matrix = torch.zeros(self._dim + 1, self._dim + 1)
         rotation_matrix[-1, -1] = 1
         self.rotation_matrix = rotation_matrix.repeat(self._num_ch, 1, 1).to(dtype=self._dtype, device=self._device)
@@ -303,14 +268,6 @@ class RigidTransformation(nn.Module):
         self.trans_matrix_pos[:, 0, 3] = self.t_x
         self.trans_matrix_pos[:, 1, 3] = self.t_y
         self.trans_matrix_pos[:, 2, 3] = self.t_z
-
-        # self.trans_matrix_cm[:, 0, 3] = -self.center_mass_x
-        # self.trans_matrix_cm[:, 1, 3] = -self.center_mass_y
-        # self.trans_matrix_cm[:, 2, 3] = -self.center_mass_z
-        #
-        # self.trans_matrix_cm_rw[:, 0, 3] = self.center_mass_x
-        # self.trans_matrix_cm_rw[:, 1, 3] = self.center_mass_y
-        # self.trans_matrix_cm_rw[:, 2, 3] = self.center_mass_z
 
         R_x = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
                                                                                   device=self._device)
@@ -336,12 +293,6 @@ class RigidTransformation(nn.Module):
         self.rotation_matrix = torch.einsum("bij, bjk->bik", torch.einsum("bij, bjk->bik", R_z, R_y), R_x)
 
     def _compute_transformation_matrix(self):
-        # transformation_matrix = torch.einsum("bij, bjk->bik",
-        #                                      torch.einsum("bij, bjk->bik",
-        #                                                   torch.einsum("bij, bjk->bik", self.trans_matrix_pos,
-        #                                                                self.trans_matrix_cm_rw),
-        #                                                   self.rotation_matrix),
-        #                                      self.trans_matrix_cm)[:, 0:self._dim, :]
         transformation_matrix = torch.einsum("bij, bjk->bik", self.trans_matrix_pos,
                                              self.rotation_matrix)[:, 0: self._dim, :]
         return transformation_matrix
@@ -402,7 +353,6 @@ def get_closest_rigid(source_oh: torch.Tensor,
         device = torch.device('cuda', source_oh.get_device())
     except RuntimeError:
         device = 'cpu'
-    num_classes = source_oh.shape[1]
 
     rigid_transform = RigidTransformation(source_oh, opt_cm=False, dtype=dtype, device=device)
     rigid_transform.init_transform(target_oh, disp_field)
@@ -431,7 +381,6 @@ def get_closest_rigid(source_oh: torch.Tensor,
     flow = rigid_transform.dense_flow
     # since we are using bilinear resampling in the model
     # we also use bilinear resampling here
-    # resample_source = F.grid_sample(source_oh, grid=flow, mode="nearest", align_corners=True)
     resample_source = F.grid_sample(source_oh, grid=flow, mode="bilinear", align_corners=True)
     # print(f"After registration, dice:{compute_meandice(resample_source, target_oh, include_background=True)}")
     # BNHWD, B = 1

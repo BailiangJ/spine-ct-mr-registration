@@ -146,30 +146,3 @@ def inout_onehot(source: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tens
     source_oh = source_oh[mask]
     target_oh = target_oh[mask]
     return source_oh.view(b, -1, h, w, d), target_oh.view(b, -1, h, w, d)
-
-
-def spatial_gradient(x: torch.Tensor, dim: int) -> torch.Tensor:
-    """
-    Calculate gradients on single dimension of a tensor using central finite difference.
-    It moves the tensor along the dimension to calculate the approximate gradient
-    dx[i] = (x[i+1] - x[i-1]) / 2.
-    Adapted from:
-        DeepReg (https://github.com/DeepRegNet/DeepReg)
-
-    Args:
-        x: the shape should be BCH(WD).
-        dim: dimension to calculate gradient along.
-    Returns:
-        gradient_dx: the shape should be BCH(WD)
-    """
-    slice_1 = slice(1, -1)
-    slice_2_s = slice(2, None)
-    slice_2_e = slice(None, -2)
-    slice_all = slice(None)
-    slicing_s, slicing_e = [slice_all, slice_all], [slice_all, slice_all]
-    while len(slicing_s) < x.ndim:
-        slicing_s = slicing_s + [slice_1]
-        slicing_e = slicing_e + [slice_1]
-    slicing_s[dim] = slice_2_s
-    slicing_e[dim] = slice_2_e
-    return (x[slicing_s] - x[slicing_e]) / 2.0

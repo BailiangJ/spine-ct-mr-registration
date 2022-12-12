@@ -4,8 +4,7 @@ from typing import List, Union, Tuple, Optional, Callable
 from torch.nn.modules.loss import _Loss
 from monai.utils.enums import LossReduction
 from monai.losses import DiceLoss
-from rigid_utils import RigidTransformation, get_closest_rigid
-from voxelmorph.torch.layers import ResizeTransform
+from utils import RigidTransformation, get_closest_rigid
 
 
 class RigidDiceLoss(_Loss):
@@ -30,7 +29,6 @@ class RigidDiceLoss(_Loss):
                 - ``"sum"``: the output will be summed.
         """
         super().__init__(reduction=LossReduction(reduction).value)
-        # self.scaler = scaler
         self.include_background = include_background
         # the first channel won't be background, inputs are one-hot format
         self.dice_loss_func = DiceLoss(include_background=True,

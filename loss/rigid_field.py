@@ -2,8 +2,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from typing import Union, Tuple, List
-from voxelmorph.torch.layers import ResizeTransform
-from rigid_utils import get_reference_grid, solve_SVD, sample_displacement_flow, get_mass_center
+from voxelmorph.layers import ResizeTransform
+from utils import get_reference_grid, get_mass_center, sample_displacement_flow, sample_correspondence, solve_SVD
 
 
 class RigidFieldLoss(nn.Module):
@@ -40,49 +40,6 @@ class RigidFieldLoss(nn.Module):
         self.include_background = include_background
         self.resize = ResizeTransform(downsize, self._dim)
 
-    def sample_correspondence(self, label_map: torch.Tensor, flow: torch.Tensor) -> torch.Tensor:
-        """
-        Sample correspondence between fixed and moving images
-        Args:
-            label_map: one-hot label mask, tensor of shape BNHWD, with B=1
-                    if inv:
-                        input = moving image
-                    else:
-                        input = fixed image
-            flow: dense displacement field mapping from
-                    if inv:
-                        moving image to fixed image
-                    else:
-                        fixed image to moving image
-
-        Returns:
-            fixed_pnts_list:
-            moving_pnts_list:
-        """
-        num_ch = label_map.shape[1]
-        src_pnts_list = []
-        des_pnts_list = []
-        for ch in range(num_ch):
-            valid_points = (label_map[0, ch] == 1).nonzero()
-            valid_len = valid_points.shape[0]
-            indices = torch.randint(valid_len, [self.num_samples]).to(self._device)
-
-            src_pnts = torch.index_select(valid_points.float(), 0, indices)
-
-            sample_grid = src_pnts.detach().clone()
-
-            sample_flow = sample_displacement_flow(sample_grid, flow, self._image_size)
-            sample_flow = sample_flow.squeeze()
-
-            # (3, num_samples)
-            src_pnts = src_pnts.transpose(0, 1)
-            des_pnts = src_pnts + sample_flow
-
-            src_pnts_list.append(src_pnts)
-            des_pnts_list.append(des_pnts)
-
-        return src_pnts_list, des_pnts_list
-
     def lsq_rigid_motion(self, y_source_pnts_list: List[torch.Tensor], source_pnts_list: List[torch.Tensor],
                          y_source_cm_list: torch.Tensor, source_cm_list: torch.Tensor) -> torch.Tensor:
         """
@@ -111,16 +68,11 @@ class RigidFieldLoss(nn.Module):
             R, t = solve_SVD(y_source_pnts, source_pnts, y_source_cm, source_cm)
 
             trans_matrix_pos = torch.diag(torch.ones(4)).to(dtype=self._dtype, device=self._device)
-            # trans_matrix_cm = torch.diag(torch.ones(4)).to(dtype=self._dtype, device=self._device)
-            # trans_matrix_cm_rw = torch.diag(torch.ones(4)).to(dtype=self._dtype, device=self._device)
             trans_matrix_rot = torch.diag(torch.ones(4)).to(dtype=self._dtype, device=self._device)
 
             trans_matrix_pos[:3, [3]] = t
-            # trans_matrix_cm[:3, [3]] = -y_source_cm
-            # trans_matrix_cm_rw[:3, [3]] = y_source_cm
             trans_matrix_rot[:3, :3] = R
 
-            # trans_matrix = trans_matrix_pos @ trans_matrix_cm @ trans_matrix_rot @ trans_matrix_cm_rw
             trans_matrix = trans_matrix_pos @ trans_matrix_rot
             trans_matrix_list.append(trans_matrix)
 
@@ -157,16 +109,15 @@ class RigidFieldLoss(nn.Module):
             source_cm_list = get_mass_center(source_oh, self.grid, self._dim)
 
             if self.inv:
-                source_pnts_list, y_source_pnts_list = self.sample_correspondence(source_oh, neg_flow)
+                source_pnts_list, y_source_pnts_list = sample_correspondence(source_oh, neg_flow)
             else:
-                y_source_pnts_list, source_pnts_list = self.sample_correspondence(y_source_oh, flow)
+                y_source_pnts_list, source_pnts_list = sample_correspondence(y_source_oh, flow)
 
             transform_matrices = self.lsq_rigid_motion(y_source_pnts_list, source_pnts_list,
                                                        y_source_cm_list, source_cm_list)
 
             # (N1HWD)
             y_source_oh = y_source_oh.squeeze(0).unsqueeze(1)
-            # source_oh = source_oh.squeeze(0).unsqueeze(1)
 
             # (N3HWD), N=self._num_ch, [[x,y,z], X,Y,Z]
             rigid_flow = torch.einsum("qijk,bpq->bpijk", self.grid, transform_matrices.reshape(-1, 3, 4))
@@ -174,10 +125,13 @@ class RigidFieldLoss(nn.Module):
             # (1,3,HWD)
             # select displacement flow inside label areas
             rigid_flow = torch.sum(rigid_flow * y_source_oh, dim=0, keepdim=True)
+            # compute the downsized rigid flow
             # rigid_flow = self.resize(rigid_flow)
 
         # (1,3,HWD)
         flow = torch.sum(y_source_oh, dim=0, keepdim=True) * flow
+        # the output displacement flow of voxelmorph network is actually an upsampled flow
+        # the final output of the registration head is downsized flow
         # flow = self.resize(flow)
         loss = torch.mean(torch.linalg.norm(rigid_flow - flow, dim=1))
         return loss
