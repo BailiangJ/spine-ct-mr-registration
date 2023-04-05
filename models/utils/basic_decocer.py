@@ -4,9 +4,10 @@ import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule
 from mmcv.runner import BaseModule
-from .upsample import UPSAMPLE_LAYERS, build_upsample_layer
-from .basic_encoder import BasicConvBlock
+
 from ..builder import DECODERS
+from .basic_encoder import BasicConvBlock
+from .upsample import UPSAMPLE_LAYERS, build_upsample_layer
 
 
 class UpConvBlock(BaseModule):
@@ -41,22 +42,24 @@ class UpConvBlock(BaseModule):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None
     """
-
-    def __init__(self,
-                 conv_block: nn.Sequential,
-                 in_channels: int,
-                 skip_channels: int,
-                 out_channels: Union[int, Sequence[int]],
-                 num_convs: int = 2,
-                 stride: int = 1,
-                 dilation: int = 1,
-                 kernel_size: Union[int, Sequence[int]] = 3,
-                 upsample_cfg: dict = dict(type='Upsample', mode='bilinear', scale_factor=2),
-                 conv_cfg: Optional[dict] = None,
-                 norm_cfg: Optional[dict] = dict(type='BN'),
-                 act_cfg: Optional[dict] = dict(type='ReLU'),
-                 init_cfg: Optional[Union[dict, list]] = None,
-                 ) -> None:
+    def __init__(
+        self,
+        conv_block: nn.Sequential,
+        in_channels: int,
+        skip_channels: int,
+        out_channels: Union[int, Sequence[int]],
+        num_convs: int = 2,
+        stride: int = 1,
+        dilation: int = 1,
+        kernel_size: Union[int, Sequence[int]] = 3,
+        upsample_cfg: dict = dict(type='Upsample',
+                                  mode='bilinear',
+                                  scale_factor=2),
+        conv_cfg: Optional[dict] = None,
+        norm_cfg: Optional[dict] = dict(type='BN'),
+        act_cfg: Optional[dict] = dict(type='ReLU'),
+        init_cfg: Optional[Union[dict, list]] = None,
+    ) -> None:
         super(UpConvBlock, self).__init__(init_cfg)
 
         self.conv_block = conv_block(
@@ -70,9 +73,7 @@ class UpConvBlock(BaseModule):
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
         )
-        self.upsample = build_upsample_layer(
-            cfg=upsample_cfg
-        )
+        self.upsample = build_upsample_layer(cfg=upsample_cfg)
 
     def forward(self, skip: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """Forward function."""
@@ -82,6 +83,7 @@ class UpConvBlock(BaseModule):
         out = self.conv_block(out)
 
         return out
+
 
 @DECODERS.register_module()
 class BasicDecoder(BaseModule):
@@ -114,22 +116,23 @@ class BasicDecoder(BaseModule):
             Default: dict(type='LeakyReLU', negative_slope=0.2).
         init_cfg (dict, list, optional): Config for module initialization.
     """
-
     def __init__(self,
                  in_channels: int,
                  skip_channels: Sequence[int],
                  pyramid_levels: Sequence[str],
                  num_convs: Sequence[int],
                  out_channels: Sequence[int],
-                 strides: Sequence[int] = (1,),
-                 dilations: Sequence[int] = (1,),
+                 strides: Sequence[int] = (1, ),
+                 dilations: Sequence[int] = (1, ),
                  kernel_size: Union[Sequence[int], int] = 3,
-                 upsample_cfg: dict = dict(type='Upsample', mode='bilinear', scale_factor=2),
+                 upsample_cfg: dict = dict(type='Upsample',
+                                           mode='bilinear',
+                                           scale_factor=2),
                  conv_cfg: Optional[dict] = None,
                  norm_cfg: Optional[dict] = None,
                  act_cfg: dict = dict(type='LeakyReLU', negative_slope=0.2),
                  init_cfg: Optional[Union[dict, list]] = None) -> None:
-        super(BasicDecoder).__init__(init_cfg)
+        super(BasicDecoder, self).__init__(init_cfg)
 
         assert len(skip_channels) == len(out_channels) == len(num_convs) == len(strides) \
                == len(dilations) == len(pyramid_levels)
@@ -167,36 +170,35 @@ class BasicDecoder(BaseModule):
                     strides[i],
                     dilations[i],
                     kernel_size=kernel_size_,
-                )
-            )
+                ))
             in_channels = out_channels[i][-1] if isinstance(
                 out_channels[i], (tuple, list)) else out_channels[i]
 
-    def _make_layer(self,
-                    in_channels: int,
-                    skip_channels: int,
-                    out_channels: int,
-                    num_convs: int,
-                    stride: int,
-                    dilation: int,
-                    kernel_size: int = 3, ) -> nn.Module:
-        return UpConvBlock(
-            conv_block=BasicConvBlock,
-            in_channels=in_channels,
-            skip_channels=skip_channels,
-            out_channels=out_channels,
-            num_convs=num_convs,
-            stride=stride,
-            dilation=dilation,
-            kernel_size=kernel_size,
-            upsample_cfg=self.upsample_cfg,
-            conv_cfg=self.conv_cfg,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg
-        )
+    def _make_layer(
+        self,
+        in_channels: int,
+        skip_channels: int,
+        out_channels: int,
+        num_convs: int,
+        stride: int,
+        dilation: int,
+        kernel_size: int = 3,
+    ) -> nn.Module:
+        return UpConvBlock(conv_block=BasicConvBlock,
+                           in_channels=in_channels,
+                           skip_channels=skip_channels,
+                           out_channels=out_channels,
+                           num_convs=num_convs,
+                           stride=stride,
+                           dilation=dilation,
+                           kernel_size=kernel_size,
+                           upsample_cfg=self.upsample_cfg,
+                           conv_cfg=self.conv_cfg,
+                           norm_cfg=self.norm_cfg,
+                           act_cfg=self.act_cfg)
 
     def forward(self, skips: Sequence[torch.Tensor]) -> torch.Tensor:
-        """Forward function for BasicDecoder"""
+        """Forward function for BasicDecoder."""
         x = skips.pop()
         for i, dec in enumerate(self.decoder):
             x = dec(skips.pop(), x)

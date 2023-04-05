@@ -1,24 +1,27 @@
+from typing import List, Sequence, Tuple, Union
+
+import numpy as np
 import torch
+import torch.nn.functional as F
+from scipy.spatial.transform import Rotation as Rot
 from torch import nn
 from torch.nn.parameter import Parameter
-import torch.nn.functional as F
-import numpy as np
-from typing import Union, Tuple, List
-from scipy.spatial.transform import Rotation as Rot
 
 
-def get_reference_grid(image_size: Union[Tuple[int], List[int]]) -> torch.Tensor:
+def get_reference_grid(image_size: Sequence[int]) -> torch.Tensor:
     """
     Generate a unnormalized coordinate grid
     Args:
         image_size: shape of input image, e.g. (64,128,128)
     """
     mesh_points = [torch.arange(0, dim) for dim in image_size]
-    grid = torch.stack(torch.meshgrid(*mesh_points), dim=0).to(dtype=torch.float)  # (spatial_dims, ...)
+    grid = torch.stack(torch.meshgrid(*mesh_points),
+                       dim=0).to(dtype=torch.float)  # (spatial_dims, ...)
     return grid
 
 
-def solve_SVD(fixed_pnts: torch.Tensor, moving_pnts: torch.Tensor, fixed_cm: torch.Tensor, moving_cm: torch.Tensor):
+def solve_SVD(fixed_pnts: torch.Tensor, moving_pnts: torch.Tensor,
+              fixed_cm: torch.Tensor, moving_cm: torch.Tensor):
     """
     Solve rigid motion using least suqare method with SVD
     Args:
@@ -48,7 +51,8 @@ def solve_SVD(fixed_pnts: torch.Tensor, moving_pnts: torch.Tensor, fixed_cm: tor
     return R, t
 
 
-def sample_correspondence(label_map: torch.Tensor, flow: torch.Tensor) -> torch.Tensor:
+def sample_correspondence(label_map: torch.Tensor,
+                          flow: torch.Tensor) -> torch.Tensor:
     """
     Sample correspondence between fixed and moving images
     Args:
@@ -74,7 +78,8 @@ def sample_correspondence(label_map: torch.Tensor, flow: torch.Tensor) -> torch.
 
         sample_grid = src_pnts.detach().clone()
 
-        sample_flow = sample_displacement_flow(sample_grid, flow, self._image_size)
+        sample_flow = sample_displacement_flow(sample_grid, flow,
+                                               self._image_size)
         sample_flow = sample_flow.squeeze()
 
         # (3, num_samples)
@@ -88,9 +93,8 @@ def sample_correspondence(label_map: torch.Tensor, flow: torch.Tensor) -> torch.
 
 
 def sample_displacement_flow(sample_grid: torch.Tensor, flow: torch.Tensor,
-                             image_size: Union[List[int], Tuple[int, ...]]) -> torch.Tensor:
-    """
-    Sample 3D displacement flow at certain locations
+                             image_size: Sequence[int]) -> torch.Tensor:
+    """Sample 3D displacement flow at certain locations.
 
     TODO: adapt it to be compatiable with 2D images
 
@@ -117,11 +121,16 @@ def sample_displacement_flow(sample_grid: torch.Tensor, flow: torch.Tensor,
     # reshape to (1,1,1,num_samples,3) for grid_sample
     sample_grid = sample_grid[None, None, None, ...]
 
-    sample_flow = F.grid_sample(flow, sample_grid, mode='nearest', padding_mode='zeros', align_corners=True)
+    sample_flow = F.grid_sample(flow,
+                                sample_grid,
+                                mode='nearest',
+                                padding_mode='zeros',
+                                align_corners=True)
     return sample_flow
 
 
-def get_mass_center(label_map: torch.Tensor, grid: torch.Tensor, dim: int) -> torch.Tensor:
+def get_mass_center(label_map: torch.Tensor, grid: torch.Tensor,
+                    dim: int) -> torch.Tensor:
     """
     Get the mass center of one-hot mask
     Args:
@@ -141,21 +150,19 @@ def get_mass_center(label_map: torch.Tensor, grid: torch.Tensor, dim: int) -> to
                               dim=list(range(1, dim + 1))) / intensity_sum
     center_mass_z = torch.sum(label_map * grid[2, ...],
                               dim=list(range(1, dim + 1))) / intensity_sum
-    center_mass = torch.stack([center_mass_x, center_mass_y, center_mass_z], dim=0)
+    center_mass = torch.stack([center_mass_x, center_mass_y, center_mass_z],
+                              dim=0)
     return center_mass
 
 
 class RigidTransformation(nn.Module):
-    """
-    Rigid centered transformation for 3D
-
-    """
-
+    """Rigid centered transformation for 3D."""
     def __init__(self,
                  moving_image,
                  opt_cm=False,
                  num_samples=256,
-                 dtype=torch.float32, device='cpu'):
+                 dtype=torch.float32,
+                 device='cpu'):
         """
         Args:
             moving_image: tensor of shape BNHWD, with B=1
@@ -171,9 +178,10 @@ class RigidTransformation(nn.Module):
         self.opt_cm = opt_cm
         grid = get_reference_grid(self._image_size)
         grid = torch.cat([grid, torch.ones_like(grid[:1])]).to(self._device)
-        self.register_buffer("grid", grid)
+        self.register_buffer('grid', grid)
 
-        self.center_mass_x, self.center_mass_y, self.center_mass_z = get_mass_center(moving_image, self.grid, self._dim)
+        self.center_mass_x, self.center_mass_y, self.center_mass_z = get_mass_center(
+            moving_image, self.grid, self._dim)
 
         self.phi_x = Parameter(torch.tensor([0.0] * self._num_ch))
         self.phi_y = Parameter(torch.tensor([0.0] * self._num_ch))
@@ -189,9 +197,8 @@ class RigidTransformation(nn.Module):
         fixed_image = fixed_image.squeeze(0)
         assert fixed_image.shape[1:] == self._image_size
 
-        fixed_image_center_mass_x, fixed_image_center_mass_y, fixed_image_center_mass_z = get_mass_center(fixed_image,
-                                                                                                          self.grid,
-                                                                                                          self._dim)
+        fixed_image_center_mass_x, fixed_image_center_mass_y, fixed_image_center_mass_z = get_mass_center(
+            fixed_image, self.grid, self._dim)
 
         self.t_x = Parameter(self.center_mass_x - fixed_image_center_mass_x)
         self.t_y = Parameter(self.center_mass_y - fixed_image_center_mass_y)
@@ -210,17 +217,16 @@ class RigidTransformation(nn.Module):
         Returns:
 
         """
-        fixed_pnts_list, moving_pnts_list = sample_correspondence(fixed_image, flow)
+        fixed_pnts_list, moving_pnts_list = sample_correspondence(
+            fixed_image, flow)
 
         fixed_image = fixed_image.squeeze(0)
         assert fixed_image.shape[1:] == self._image_size
-        fixed_cm_list = get_mass_center(fixed_image,
-                                        self.grid,
-                                        self._dim)
+        fixed_cm_list = get_mass_center(fixed_image, self.grid, self._dim)
 
-        moving_cm_list = torch.stack([self.center_mass_x,
-                                      self.center_mass_y,
-                                      self.center_mass_z], dim=0)
+        moving_cm_list = torch.stack(
+            [self.center_mass_x, self.center_mass_y, self.center_mass_z],
+            dim=0)
 
         phi_x_list = []
         phi_y_list = []
@@ -259,51 +265,56 @@ class RigidTransformation(nn.Module):
         self.t_z = Parameter(torch.tensor(t_z_list))
 
     def _compute_transformation_3d(self):
-        self.trans_matrix_pos = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
-                                                                                                    device=self._device)
+        self.trans_matrix_pos = torch.diag(torch.ones(self._dim + 1)).repeat(
+            self._num_ch, 1, 1).to(dtype=self._dtype, device=self._device)
         rotation_matrix = torch.zeros(self._dim + 1, self._dim + 1)
         rotation_matrix[-1, -1] = 1
-        self.rotation_matrix = rotation_matrix.repeat(self._num_ch, 1, 1).to(dtype=self._dtype, device=self._device)
+        self.rotation_matrix = rotation_matrix.repeat(self._num_ch, 1, 1).to(
+            dtype=self._dtype, device=self._device)
 
         self.trans_matrix_pos[:, 0, 3] = self.t_x
         self.trans_matrix_pos[:, 1, 3] = self.t_y
         self.trans_matrix_pos[:, 2, 3] = self.t_z
 
-        R_x = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
-                                                                                  device=self._device)
+        R_x = torch.diag(torch.ones(self._dim + 1)).repeat(
+            self._num_ch, 1, 1).to(dtype=self._dtype, device=self._device)
         R_x[:, 1, 1] = torch.cos(self.phi_x)
         R_x[:, 1, 2] = -torch.sin(self.phi_x)
         R_x[:, 2, 1] = torch.sin(self.phi_x)
         R_x[:, 2, 2] = torch.cos(self.phi_x)
 
-        R_y = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
-                                                                                  device=self._device)
+        R_y = torch.diag(torch.ones(self._dim + 1)).repeat(
+            self._num_ch, 1, 1).to(dtype=self._dtype, device=self._device)
         R_y[:, 0, 0] = torch.cos(self.phi_y)
         R_y[:, 0, 2] = torch.sin(self.phi_y)
         R_y[:, 2, 0] = -torch.sin(self.phi_y)
         R_y[:, 2, 2] = torch.cos(self.phi_y)
 
-        R_z = torch.diag(torch.ones(self._dim + 1)).repeat(self._num_ch, 1, 1).to(dtype=self._dtype,
-                                                                                  device=self._device)
+        R_z = torch.diag(torch.ones(self._dim + 1)).repeat(
+            self._num_ch, 1, 1).to(dtype=self._dtype, device=self._device)
         R_z[:, 0, 0] = torch.cos(self.phi_z)
         R_z[:, 0, 1] = -torch.sin(self.phi_z)
         R_z[:, 1, 0] = torch.sin(self.phi_z)
         R_z[:, 1, 1] = torch.cos(self.phi_z)
 
-        self.rotation_matrix = torch.einsum("bij, bjk->bik", torch.einsum("bij, bjk->bik", R_z, R_y), R_x)
+        self.rotation_matrix = torch.einsum(
+            'bij, bjk->bik', torch.einsum('bij, bjk->bik', R_z, R_y), R_x)
 
     def _compute_transformation_matrix(self):
-        transformation_matrix = torch.einsum("bij, bjk->bik", self.trans_matrix_pos,
-                                             self.rotation_matrix)[:, 0: self._dim, :]
+        transformation_matrix = torch.einsum(
+            'bij, bjk->bik', self.trans_matrix_pos,
+            self.rotation_matrix)[:, 0:self._dim, :]
         return transformation_matrix
 
     def _compute_dense_flow(self, transformation_matrix, return_orig=False):
         # （N, 3, HWD)
-        flow = torch.einsum("qijk,bpq->bpijk", self.grid, transformation_matrix.reshape(-1, 3, 4))
+        flow = torch.einsum('qijk,bpq->bpijk', self.grid,
+                            transformation_matrix.reshape(-1, 3, 4))
         if not return_orig:
             # normalize flow values to [-1, 1] for grid_sample
             for i in range(self._dim):
-                flow[:, i, ...] = 2 * (flow[:, i, ...] / (self._image_size[i] - 1) - 0.5)
+                flow[:, i, ...] = 2 * (flow[:, i, ...] /
+                                       (self._image_size[i] - 1) - 0.5)
 
             # [X, Y, Z, [x,y,z]]
             flow = flow.permute([0] + list(range(2, 2 + self._dim)) + [1])
@@ -322,13 +333,15 @@ class RigidTransformation(nn.Module):
     def dense_flow(self):
         self._compute_transformation_3d()
         transformation_matrix = self._compute_transformation_matrix()
-        return self._compute_dense_flow(transformation_matrix, return_orig=False)
+        return self._compute_dense_flow(transformation_matrix,
+                                        return_orig=False)
 
     @property
     def orig_flow(self):
         self._compute_transformation_3d()
         transformation_matrix = self._compute_transformation_matrix()
-        return self._compute_dense_flow(transformation_matrix, return_orig=True)
+        return self._compute_dense_flow(transformation_matrix,
+                                        return_orig=True)
 
 
 def get_closest_rigid(source_oh: torch.Tensor,
@@ -354,7 +367,10 @@ def get_closest_rigid(source_oh: torch.Tensor,
     except RuntimeError:
         device = 'cpu'
 
-    rigid_transform = RigidTransformation(source_oh, opt_cm=False, dtype=dtype, device=device)
+    rigid_transform = RigidTransformation(source_oh,
+                                          opt_cm=False,
+                                          dtype=dtype,
+                                          device=device)
     rigid_transform.init_transform(target_oh, disp_field)
 
     # BNHWD, B = 1
@@ -362,14 +378,19 @@ def get_closest_rigid(source_oh: torch.Tensor,
     target_oh = target_oh.squeeze(0).unsqueeze(1)
 
     optimizer = torch.optim.Adam(rigid_transform.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                step_size=10,
+                                                gamma=0.5)
 
     for i in range(num_iteration):
         optimizer.zero_grad()
         flow = rigid_transform.dense_flow
-        resample_source = F.grid_sample(source_oh, grid=flow, mode="bilinear", align_corners=True)
+        resample_source = F.grid_sample(source_oh,
+                                        grid=flow,
+                                        mode='bilinear',
+                                        align_corners=True)
 
-        loss = torch.sum((target_oh - resample_source) ** 2)
+        loss = torch.sum((target_oh - resample_source)**2)
         # print(f"iter {i}, loss: {loss}")
 
         loss.backward()
@@ -381,7 +402,10 @@ def get_closest_rigid(source_oh: torch.Tensor,
     flow = rigid_transform.dense_flow
     # since we are using bilinear resampling in the model
     # we also use bilinear resampling here
-    resample_source = F.grid_sample(source_oh, grid=flow, mode="bilinear", align_corners=True)
+    resample_source = F.grid_sample(source_oh,
+                                    grid=flow,
+                                    mode='bilinear',
+                                    align_corners=True)
     # print(f"After registration, dice:{compute_meandice(resample_source, target_oh, include_background=True)}")
     # BNHWD, B = 1
     resample_source = resample_source.squeeze(1).unsqueeze(0)

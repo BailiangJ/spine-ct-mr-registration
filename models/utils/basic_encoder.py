@@ -4,12 +4,13 @@ import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule
 from mmcv.runner import BaseModule
-from .pooling import build_pooling_layer
+
 from ..builder import ENCODERS
+from .pooling import build_pooling_layer
 
 
 class BasicConvBlock(BaseModule):
-    """Basic convolution block
+    """Basic convolution block.
 
     This module consists of several plain convolution layers.
 
@@ -37,7 +38,6 @@ class BasicConvBlock(BaseModule):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None
     """
-
     def __init__(self,
                  in_channels: int,
                  out_channels: Union[int, Sequence[int]],
@@ -52,13 +52,16 @@ class BasicConvBlock(BaseModule):
                  init_cfg: Optional[Union[dict, list]] = None) -> None:
         super(BasicConvBlock, self).__init__(init_cfg)
         if pool_cfg and stride == 2:
-            print("using both pooling and stride conv for downsampling.")
+            print('using both pooling and stride conv for downsampling.')
 
         convs = []
         in_channels = in_channels
         for i in range(num_convs):
-            k = kernel_size[i] if isinstance(kernel_size, (tuple, list)) else kernel_size
-            out_ch = out_channels[i] if isinstance(out_channels, (tuple, list)) else out_channels
+            k = kernel_size[i] if isinstance(kernel_size,
+                                             (tuple, list)) else kernel_size
+            out_ch = out_channels[i] if isinstance(out_channels,
+                                                   (tuple,
+                                                    list)) else out_channels
 
             # first pooling then conv, level 0 doesn't do pooling in encoder
             # better for the skip connection
@@ -66,16 +69,15 @@ class BasicConvBlock(BaseModule):
                 convs.append(build_pooling_layer(pool_cfg))
 
             convs.append(
-                ConvModule(
-                    in_channels=in_channels,
-                    out_channels=out_ch,
-                    kernel_size=k,
-                    stride=stride if i == 0 else 1,
-                    dilation=1 if i == 0 else dilation,
-                    padding=k // 2 if i == 0 else dilation,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg))
+                ConvModule(in_channels=in_channels,
+                           out_channels=out_ch,
+                           kernel_size=k,
+                           stride=stride if i == 0 else 1,
+                           dilation=1 if i == 0 else dilation,
+                           padding=k // 2 if i == 0 else dilation,
+                           conv_cfg=conv_cfg,
+                           norm_cfg=norm_cfg,
+                           act_cfg=act_cfg))
             in_channels = out_ch
 
         self.layers = nn.Sequential(*convs)
@@ -83,6 +85,7 @@ class BasicConvBlock(BaseModule):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.layers(x)
         return out
+
 
 @ENCODERS.register_module()
 class BasicEncoder(BaseModule):
@@ -113,26 +116,26 @@ class BasicEncoder(BaseModule):
             Default: dict(type='MaxPool2d', kernel_size=2).
         init_cfg (dict, list, optional): Config for module initialization.
     """
-
     def __init__(self,
                  in_channels: int,
                  pyramid_levels: Sequence[str],
                  num_convs: Sequence[int],
                  out_channels: Sequence[int],
-                 strides: Sequence[int] = (1,),
-                 dilations: Sequence[int] = (1,),
+                 strides: Sequence[int] = (1, ),
+                 dilations: Sequence[int] = (1, ),
                  kernel_size: Union[Sequence[int], int] = 3,
                  conv_cfg: Optional[dict] = None,
                  norm_cfg: Optional[dict] = None,
                  act_cfg: dict = dict(type='LeakyReLU', negative_slope=0.2),
-                 pool_cfg: Optional[dict] = dict(type='MaxPool2d', kernel_size=2),
+                 pool_cfg: Optional[dict] = dict(type='MaxPool2d',
+                                                 kernel_size=2),
                  init_cfg: Optional[Union[dict, list]] = None) -> None:
-        super(BasicEncoder).__init__(init_cfg)
+        super(BasicEncoder, self).__init__(init_cfg)
 
         assert len(out_channels) == len(num_convs) == len(strides) == len(
             dilations) == len(pyramid_levels)
         if pool_cfg and any((s == 2 for s in strides)):
-            print("using both pooling and stride conv for downsampling.")
+            print('using both pooling and stride conv for downsampling.')
         self.in_channels = in_channels
         self.pyramid_levels = pyramid_levels
         self.out_channels = out_channels
@@ -161,14 +164,13 @@ class BasicEncoder(BaseModule):
                 pool_cfg_ = self.pool_cfg
 
             self.encoder.append(
-                self._make_layer(
-                    in_channels,
-                    out_channels[i],
-                    num_convs[i],
-                    strides[i],
-                    dilations[i],
-                    kernel_size=kernel_size_,
-                    pool_cfg=pool_cfg_))
+                self._make_layer(in_channels,
+                                 out_channels[i],
+                                 num_convs[i],
+                                 strides[i],
+                                 dilations[i],
+                                 kernel_size=kernel_size_,
+                                 pool_cfg=pool_cfg_))
             in_channels = out_channels[i][-1] if isinstance(
                 out_channels[i], (tuple, list)) else out_channels[i]
 
@@ -180,20 +182,20 @@ class BasicEncoder(BaseModule):
                     dilation: int,
                     kernel_size: int = 3,
                     pool_cfg: Optional[dict] = None) -> nn.Module:
-        return BasicConvBlock(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            num_convs=num_convs,
-            stride=stride,
-            dilation=dilation,
-            kernel_size=kernel_size,
-            pool_cfg=pool_cfg,
-            conv_cfg=self.conv_cfg,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+        return BasicConvBlock(in_channels=in_channels,
+                              out_channels=out_channels,
+                              num_convs=num_convs,
+                              stride=stride,
+                              dilation=dilation,
+                              kernel_size=kernel_size,
+                              pool_cfg=pool_cfg,
+                              conv_cfg=self.conv_cfg,
+                              norm_cfg=self.norm_cfg,
+                              act_cfg=self.act_cfg)
 
     def forward(self, x: torch.Tensor) -> list:
         """Forward function for BasicEncoder.
+
         Args:
             x (Tensor): The input data.
         Returns:

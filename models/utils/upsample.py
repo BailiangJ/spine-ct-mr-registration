@@ -1,13 +1,11 @@
 from typing import Optional, Sequence, Union
 
+import torch
 import torch.nn as nn
-from mmcv.utils import Registry
-from mmcv.runner import BaseModule
 from mmcv.cnn import ConvModule
 from mmcv.cnn.bricks.registry import CONV_LAYERS
-
-CONV_LAYERS.register_module('ConvTranspose2d', module=nn.ConvTranspose2d)
-CONV_LAYERS.register_module('ConvTranspose3d', module=nn.ConvTranspose3d)
+from mmcv.runner import BaseModule
+from mmcv.utils import Registry
 
 UPSAMPLE_LAYERS = Registry('upsample layer')
 UPSAMPLE_LAYERS.register_module('Upsample', module=nn.Upsample)
@@ -34,17 +32,17 @@ class DeconvModule(BaseModule):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None
     """
-
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 kernel_size: int = 4,
-                 scale_factor: int = 2,
-                 conv_cfg: dict = dict(type='ConvTranspose2d'),
-                 norm_cfg: Optional[dict] = dict(type='BN'),
-                 act_cfg: Optional[dict] = dict(type='ReLU'),
-                 init_cfg: Optional[Union[dict, list]] = None,
-                 ) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 4,
+        scale_factor: int = 2,
+        conv_cfg: dict = dict(type='ConvTranspose2d'),
+        norm_cfg: Optional[dict] = dict(type='BN'),
+        act_cfg: Optional[dict] = dict(type='ReLU'),
+        init_cfg: Optional[Union[dict, list]] = None,
+    ) -> None:
         super(DeconvModule, self).__init__(init_cfg)
 
         assert (kernel_size - scale_factor >= 0) and \
@@ -56,16 +54,14 @@ class DeconvModule(BaseModule):
 
         stride = scale_factor
         padding = (kernel_size - scale_factor) // 2
-        self.deconv_upsamping = ConvModule(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            conv_cfg=conv_cfg,
-            norm_cfg=norm_cfg,
-            act_cfg=act_cfg
-        )
+        self.deconv_upsamping = ConvModule(in_channels,
+                                           out_channels,
+                                           kernel_size=kernel_size,
+                                           stride=stride,
+                                           padding=padding,
+                                           conv_cfg=conv_cfg,
+                                           norm_cfg=norm_cfg,
+                                           act_cfg=act_cfg)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward function."""
@@ -104,32 +100,33 @@ class InterpConv(BaseModule):
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None
     """
-
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 kernel_size: int = 1,
-                 stride: int = 1,
-                 padding: int = 0,
-                 upsample_cfg: dict = dict(type="Upsample",
-                                           scale_factor=2, mode='bilinear', align_corners=False),
-                 conv_first: bool = False,
-                 conv_cfg: Optional[dict] = None,
-                 norm_cfg: Optional[dict] = dict(type='BN'),
-                 act_cfg: Optional[dict] = dict(type='ReLU'),
-                 init_cfg: Optional[Union[dict, list]] = None,
-                 ) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 1,
+        stride: int = 1,
+        padding: int = 0,
+        upsample_cfg: dict = dict(type='Upsample',
+                                  scale_factor=2,
+                                  mode='bilinear',
+                                  align_corners=False),
+        conv_first: bool = False,
+        conv_cfg: Optional[dict] = None,
+        norm_cfg: Optional[dict] = dict(type='BN'),
+        act_cfg: Optional[dict] = dict(type='ReLU'),
+        init_cfg: Optional[Union[dict, list]] = None,
+    ) -> None:
         super(InterpConv, self).__init__(init_cfg)
 
-        conv = ConvModule(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            conv_cfg=conv_cfg,
-            norm_cfg=norm_cfg,
-            act_cfg=act_cfg)
+        conv = ConvModule(in_channels,
+                          out_channels,
+                          kernel_size=kernel_size,
+                          stride=stride,
+                          padding=padding,
+                          conv_cfg=conv_cfg,
+                          norm_cfg=norm_cfg,
+                          act_cfg=act_cfg)
         upsample = build_upsample_layer(upsample_cfg)
         if conv_first:
             self.interp_upsample = nn.Sequential(conv, upsample)
@@ -173,7 +170,5 @@ def build_upsample_layer(cfg, *args, **kwargs) -> nn.Module:
     else:
         upsample = UPSAMPLE_LAYERS.get(layer_type)
 
-    if upsample is nn.Upsample:
-        cfg_['mode'] = layer_type
     layer = upsample(*args, **kwargs, **cfg_)
     return layer

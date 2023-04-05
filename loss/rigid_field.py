@@ -1,23 +1,25 @@
+from typing import List, Sequence, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 from torch import nn
-from typing import Union, Tuple, List
+
+from utils import (get_mass_center, get_reference_grid, sample_correspondence,
+                   sample_displacement_flow, solve_SVD)
 from voxelmorph.layers import ResizeTransform
-from utils import get_reference_grid, get_mass_center, sample_displacement_flow, sample_correspondence, solve_SVD
 
 
 class RigidFieldLoss(nn.Module):
-    """
-    Compute rigid motion between input one-hot mask and target one-hot mask using SVD
-    """
-
+    """Compute rigid motion between input one-hot mask and target one-hot mask using
+    SVD."""
     def __init__(self,
-                 image_size: Union[List[int], Tuple[int, ...]] = (64, 128, 128),
+                 image_size: Sequence[int] = (64, 128, 128),
                  num_samples: int = 16,
                  downsize: int = 2,
                  inv: bool = False,
                  include_background: bool = False,
-                 dtype=torch.float32, device='cpu'):
+                 dtype=torch.float32,
+                 device='cpu'):
         """
 
         Args:
@@ -34,14 +36,16 @@ class RigidFieldLoss(nn.Module):
         grid = get_reference_grid(self._image_size)
         grid = torch.cat([grid, torch.ones_like(grid[:1])]).to(self._device)
         # (4,HWD)
-        self.register_buffer("grid", grid)
+        self.register_buffer('grid', grid)
         self.num_samples = num_samples
         self.inv = inv
         self.include_background = include_background
         self.resize = ResizeTransform(downsize, self._dim)
 
-    def lsq_rigid_motion(self, y_source_pnts_list: List[torch.Tensor], source_pnts_list: List[torch.Tensor],
-                         y_source_cm_list: torch.Tensor, source_cm_list: torch.Tensor) -> torch.Tensor:
+    def lsq_rigid_motion(self, y_source_pnts_list: Sequence[torch.Tensor],
+                         source_pnts_list: Sequence[torch.Tensor],
+                         y_source_cm_list: torch.Tensor,
+                         source_cm_list: torch.Tensor) -> torch.Tensor:
         """
         Least Square Method solving Rigid motion from correspondences
         https://igl.ethz.ch/projects/ARAP/svd_rot.pdf
@@ -65,10 +69,13 @@ class RigidFieldLoss(nn.Module):
             y_source_cm = y_source_cm_list[:, [ch]]
             source_cm = source_cm_list[:, [ch]]
 
-            R, t = solve_SVD(y_source_pnts, source_pnts, y_source_cm, source_cm)
+            R, t = solve_SVD(y_source_pnts, source_pnts, y_source_cm,
+                             source_cm)
 
-            trans_matrix_pos = torch.diag(torch.ones(4)).to(dtype=self._dtype, device=self._device)
-            trans_matrix_rot = torch.diag(torch.ones(4)).to(dtype=self._dtype, device=self._device)
+            trans_matrix_pos = torch.diag(torch.ones(4)).to(
+                dtype=self._dtype, device=self._device)
+            trans_matrix_rot = torch.diag(torch.ones(4)).to(
+                dtype=self._dtype, device=self._device)
 
             trans_matrix_pos[:3, [3]] = t
             trans_matrix_rot[:3, :3] = R
@@ -81,8 +88,7 @@ class RigidFieldLoss(nn.Module):
         return transform_matrices[:, :3, :]
 
     def forward(self, y_source_oh: torch.Tensor, source_oh: torch.Tensor,
-                flow: torch.Tensor,
-                neg_flow: torch.Tensor) -> torch.Tensor:
+                flow: torch.Tensor, neg_flow: torch.Tensor) -> torch.Tensor:
         """
 
         Args:
@@ -101,30 +107,40 @@ class RigidFieldLoss(nn.Module):
 
             # BNHWD
             # exclude low volume mask
-            valid_ch = torch.logical_and(y_source_oh.sum(dim=(0, 2, 3, 4)) > 100, source_oh.sum(dim=(0, 2, 3, 4)) > 100)
+            valid_ch = torch.logical_and(
+                y_source_oh.sum(dim=(0, 2, 3, 4)) > 100,
+                source_oh.sum(dim=(0, 2, 3, 4)) > 100)
             y_source_oh = y_source_oh[:, valid_ch, ...]
             source_oh = source_oh[:, valid_ch, ...]
 
-            y_source_cm_list = get_mass_center(y_source_oh, self.grid, self._dim)
+            y_source_cm_list = get_mass_center(y_source_oh, self.grid,
+                                               self._dim)
             source_cm_list = get_mass_center(source_oh, self.grid, self._dim)
 
             if self.inv:
-                source_pnts_list, y_source_pnts_list = sample_correspondence(source_oh, neg_flow)
+                source_pnts_list, y_source_pnts_list = sample_correspondence(
+                    source_oh, neg_flow)
             else:
-                y_source_pnts_list, source_pnts_list = sample_correspondence(y_source_oh, flow)
+                y_source_pnts_list, source_pnts_list = sample_correspondence(
+                    y_source_oh, flow)
 
-            transform_matrices = self.lsq_rigid_motion(y_source_pnts_list, source_pnts_list,
-                                                       y_source_cm_list, source_cm_list)
+            transform_matrices = self.lsq_rigid_motion(y_source_pnts_list,
+                                                       source_pnts_list,
+                                                       y_source_cm_list,
+                                                       source_cm_list)
 
             # (N1HWD)
             y_source_oh = y_source_oh.squeeze(0).unsqueeze(1)
 
             # (N3HWD), N=self._num_ch, [[x,y,z], X,Y,Z]
-            rigid_flow = torch.einsum("qijk,bpq->bpijk", self.grid, transform_matrices.reshape(-1, 3, 4))
+            rigid_flow = torch.einsum('qijk,bpq->bpijk', self.grid,
+                                      transform_matrices.reshape(-1, 3, 4))
             rigid_flow = rigid_flow - self.grid[None, :3, ...]
             # (1,3,HWD)
             # select displacement flow inside label areas
-            rigid_flow = torch.sum(rigid_flow * y_source_oh, dim=0, keepdim=True)
+            rigid_flow = torch.sum(rigid_flow * y_source_oh,
+                                   dim=0,
+                                   keepdim=True)
             # compute the downsized rigid flow
             # rigid_flow = self.resize(rigid_flow)
 

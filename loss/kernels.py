@@ -1,18 +1,16 @@
 from __future__ import absolute_import
 
 import numpy as np
-import torch.nn.functional as F
 import torch
+import torch.nn.functional as F
 
-_func_conv_nd_table = {
-    1: F.conv1d,
-    2: F.conv2d,
-    3: F.conv3d
-}
+_func_conv_nd_table = {1: F.conv1d, 2: F.conv2d, 3: F.conv3d}
 
 
-def spatial_filter_nd(x: torch.Tensor, kernel: torch.Tensor, mode: str = 'replicate') -> torch.Tensor:
-    """ N-dimensional spatial filter with padding.
+def spatial_filter_nd(x: torch.Tensor,
+                      kernel: torch.Tensor,
+                      mode: str = 'replicate') -> torch.Tensor:
+    """N-dimensional spatial filter with padding.
 
     Args:
         x: the shape should be BNH[WD]
@@ -23,10 +21,11 @@ def spatial_filter_nd(x: torch.Tensor, kernel: torch.Tensor, mode: str = 'replic
         torch.Tensor: Output tensor
     """
     kernel = kernel.to(x)
-    
+
     n_dim = x.dim() - 2
     if n_dim <= 0 or n_dim > 3:
-        raise AssertionError(f"the spatial dims of input should be 1, 2 or 3, get{n_dim}")
+        raise AssertionError(
+            f'the spatial dims of input should be 1, 2 or 3, get{n_dim}')
     conv = _func_conv_nd_table[n_dim]
 
     pad = [None, None] * n_dim
@@ -39,7 +38,8 @@ def spatial_filter_nd(x: torch.Tensor, kernel: torch.Tensor, mode: str = 'replic
 
 # NOTE: Gaussian kernel
 def _gauss_1d(x, mu, sigma):
-    return 1. / (sigma * np.sqrt(2 * np.pi)) * np.exp(- (x - mu) ** 2 / (2 * sigma ** 2))
+    return 1. / (sigma * np.sqrt(2 * np.pi)) * np.exp(-(x - mu)**2 /
+                                                      (2 * sigma**2))
 
 
 def gauss_kernel_1d(sigma, truncate=4.0):
@@ -106,20 +106,13 @@ def gradient_kernel_1d(method='default'):
 
 def gradient_kernel_2d(method='default', axis=0):
     if method == 'default':
-        kernel_2d = np.array([[0, -1, 0],
-                              [0, 0, 0],
-                              [0, +1, 0]])
+        kernel_2d = np.array([[0, -1, 0], [0, 0, 0], [0, +1, 0]])
     elif method == 'sobel':
-        kernel_2d = np.array([[-1, -2, -1],
-                              [0, 0, 0],
-                              [+1, +2, +1]])
+        kernel_2d = np.array([[-1, -2, -1], [0, 0, 0], [+1, +2, +1]])
     elif method == 'prewitt':
-        kernel_2d = np.array([[-1, -1, -1],
-                              [0, 0, 0],
-                              [+1, +1, +1]])
+        kernel_2d = np.array([[-1, -1, -1], [0, 0, 0], [+1, +1, +1]])
     elif method == 'isotropic':
-        kernel_2d = np.array([[-1, -np.sqrt(2), -1],
-                              [0, 0, 0],
+        kernel_2d = np.array([[-1, -np.sqrt(2), -1], [0, 0, 0],
                               [+1, +np.sqrt(2), +1]])
     else:
         raise ValueError('unsupported method (got {})'.format(method))
@@ -129,44 +122,22 @@ def gradient_kernel_2d(method='default', axis=0):
 
 def gradient_kernel_3d(method='default', axis=0):
     if method == 'default':
-        kernel_3d = np.array([[[0, 0, 0],
-                               [0, -1, 0],
-                               [0, 0, 0]],
-                              [[0, 0, 0],
-                               [0, 0, 0],
-                               [0, 0, 0]],
-                              [[0, 0, 0],
-                               [0, +1, 0],
-                               [0, 0, 0]]])
+        kernel_3d = np.array([[[0, 0, 0], [0, -1, 0], [0, 0, 0]],
+                              [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                              [[0, 0, 0], [0, +1, 0], [0, 0, 0]]])
     elif method == 'sobel':
-        kernel_3d = np.array([[[-1, -3, -1],
-                               [-3, -6, -3],
-                               [-1, -3, -1]],
-                              [[0, 0, 0],
-                               [0, 0, 0],
-                               [0, 0, 0]],
-                              [[+1, +3, +1],
-                               [+3, +6, +3],
-                               [+1, +3, +1]]])
+        kernel_3d = np.array([[[-1, -3, -1], [-3, -6, -3], [-1, -3, -1]],
+                              [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                              [[+1, +3, +1], [+3, +6, +3], [+1, +3, +1]]])
     elif method == 'prewitt':
-        kernel_3d = np.array([[[-1, -1, -1],
-                               [-1, -1, -1],
-                               [-1, -1, -1]],
-                              [[0, 0, 0],
-                               [0, 0, 0],
-                               [0, 0, 0]],
-                              [[+1, +1, +1],
-                               [+1, +1, +1],
-                               [+1, +1, +1]]])
+        kernel_3d = np.array([[[-1, -1, -1], [-1, -1, -1], [-1, -1, -1]],
+                              [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                              [[+1, +1, +1], [+1, +1, +1], [+1, +1, +1]]])
     elif method == 'isotropic':
-        kernel_3d = np.array([[[-1, -1, -1],
-                               [-1, -np.sqrt(2), -1],
-                               [-1, -1, -1]],
-                              [[0, 0, 0],
-                               [0, 0, 0],
-                               [0, 0, 0]],
-                              [[+1, +1, +1],
-                               [+1, +np.sqrt(2), +1],
+        kernel_3d = np.array([[[-1, -1, -1], [-1, -np.sqrt(2),
+                                              -1], [-1, -1, -1]],
+                              [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                              [[+1, +1, +1], [+1, +np.sqrt(2), +1],
                                [+1, +1, +1]]])
     else:
         raise ValueError('unsupported method (got {})'.format(method))

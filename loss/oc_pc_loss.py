@@ -1,11 +1,12 @@
-from typing import Callable, List, Optional, Sequence, Union, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple, Union
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from kernels import (gradient_kernel_1d, gradient_kernel_2d,
+                     gradient_kernel_3d, spatial_filter_nd)
 from torch.nn.modules.loss import _Loss
-from kernels import gradient_kernel_1d, gradient_kernel_2d, gradient_kernel_3d
-from kernels import spatial_filter_nd
 from torch.nn.parameter import Parameter
 
 
@@ -40,31 +41,45 @@ class OrthonormalPropernessCondition(_Loss):
         """
         # (3,1,1,H,W,D)
         gradx = torch.stack([
-            0.5 * spatial_filter_nd(disp[:, [0], ...], kernel=self.grad_x_kernel, mode='constant'),
-            0.5 * spatial_filter_nd(disp[:, [1], ...], kernel=self.grad_x_kernel, mode='constant'),
-            0.5 * spatial_filter_nd(disp[:, [2], ...], kernel=self.grad_x_kernel, mode='constant')
-        ], dim=0)
+            0.5 * spatial_filter_nd(
+                disp[:, [0], ...], kernel=self.grad_x_kernel, mode='constant'),
+            0.5 * spatial_filter_nd(
+                disp[:, [1], ...], kernel=self.grad_x_kernel, mode='constant'),
+            0.5 * spatial_filter_nd(
+                disp[:, [2], ...], kernel=self.grad_x_kernel, mode='constant')
+        ],
+                            dim=0)
         grady = torch.stack([
-            0.5 * spatial_filter_nd(disp[:, [0], ...], kernel=self.grad_y_kernel, mode='constant'),
-            0.5 * spatial_filter_nd(disp[:, [1], ...], kernel=self.grad_y_kernel, mode='constant'),
-            0.5 * spatial_filter_nd(disp[:, [2], ...], kernel=self.grad_y_kernel, mode='constant')
-        ], dim=0)
+            0.5 * spatial_filter_nd(
+                disp[:, [0], ...], kernel=self.grad_y_kernel, mode='constant'),
+            0.5 * spatial_filter_nd(
+                disp[:, [1], ...], kernel=self.grad_y_kernel, mode='constant'),
+            0.5 * spatial_filter_nd(
+                disp[:, [2], ...], kernel=self.grad_y_kernel, mode='constant')
+        ],
+                            dim=0)
         gradz = torch.stack([
-            0.5 * spatial_filter_nd(disp[:, [0], ...], kernel=self.grad_z_kernel, mode='constant'),
-            0.5 * spatial_filter_nd(disp[:, [1], ...], kernel=self.grad_z_kernel, mode='constant'),
-            0.5 * spatial_filter_nd(disp[:, [2], ...], kernel=self.grad_z_kernel, mode='constant')
-        ], dim=0)
+            0.5 * spatial_filter_nd(
+                disp[:, [0], ...], kernel=self.grad_z_kernel, mode='constant'),
+            0.5 * spatial_filter_nd(
+                disp[:, [1], ...], kernel=self.grad_z_kernel, mode='constant'),
+            0.5 * spatial_filter_nd(
+                disp[:, [2], ...], kernel=self.grad_z_kernel, mode='constant')
+        ],
+                            dim=0)
 
         # (3,3,1,H,W,D)
         grad_disp = torch.cat([gradx, grady, gradz], dim=1)
         # [dphi_x/dx, dphi_x/dy, dphi_x/dz]
         # [dphi_y/dx, dphi_y/dy, dphi_y/dz]
         # [dphi_z/dx, dphi_z/dy, dphi_z/dz]
-        grad_deform = grad_disp + torch.eye(3, 3).view(3, 3, 1, 1, 1, 1).to(disp)
+        grad_deform = grad_disp + torch.eye(3, 3).view(3, 3, 1, 1, 1,
+                                                       1).to(disp)
 
         return grad_deform
 
-    def forward(self, disp: torch.Tensor, y_source_oh: torch.Tensor) -> torch.Tensor:
+    def forward(self, disp: torch.Tensor,
+                y_source_oh: torch.Tensor) -> torch.Tensor:
         """
         Compute the orthonormality condition of displacement field
         Args:
@@ -91,14 +106,15 @@ class OrthonormalPropernessCondition(_Loss):
                      1, 1, ...])
 
         pc = pc.squeeze()
-        E_pc = torch.sum((pc - 1) ** 2 * y_source_oh) / y_source_oh.sum()
+        E_pc = torch.sum((pc - 1)**2 * y_source_oh) / y_source_oh.sum()
 
-        oc = torch.einsum("kilhwd,kjlhwd->ijlhwd", grad_deform, grad_deform)
+        oc = torch.einsum('kilhwd,kjlhwd->ijlhwd', grad_deform, grad_deform)
 
         # (9,1,H,W,D)
-        oc = oc.flatten(start_dim=0, end_dim=1) - torch.eye(3, 3).view(9, 1, 1, 1, 1).to(disp)
+        oc = oc.flatten(start_dim=0, end_dim=1) - torch.eye(3, 3).view(
+            9, 1, 1, 1, 1).to(disp)
         # (1,H,W,D)
-        E_oc = torch.sum(oc ** 2, dim=0)
+        E_oc = torch.sum(oc**2, dim=0)
         E_oc = E_oc.squeeze()
 
         E_oc = torch.sum(E_oc * y_source_oh) / y_source_oh.sum()

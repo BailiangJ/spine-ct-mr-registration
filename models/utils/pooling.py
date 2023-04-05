@@ -8,21 +8,22 @@ POOLING_LAYERS.register_module('MaxPool3d', module=nn.MaxPool3d)
 POOLING_LAYERS.register_module('AvgPool2d', module=nn.AvgPool2d)
 POOLING_LAYERS.register_module('AvgPool3d', module=nn.AvgPool3d)
 
-def build_pooling_layer(cfg:dict, *args, **kwargs)->nn.Module:
+
+def build_pooling_layer(cfg: dict, *args, **kwargs) -> nn.Module:
     """Build pooling layer.
 
-        Args:
-            cfg (None or dict): The pooling layer config, which should contain:
-                - type (str): Layer type.
-                - layer args: Args needed to instantiate a pooling layer.
-            args (argument list): Arguments passed to the `__init__`
-                method of the corresponding pooling layer.
-            kwargs (keyword arguments): Keyword arguments passed to the `__init__`
-                method of the corresponding pooling layer.
+    Args:
+        cfg (None or dict): The pooling layer config, which should contain:
+            - type (str): Layer type.
+            - layer args: Args needed to instantiate a pooling layer.
+        args (argument list): Arguments passed to the `__init__`
+            method of the corresponding pooling layer.
+        kwargs (keyword arguments): Keyword arguments passed to the `__init__`
+            method of the corresponding pooling layer.
 
-        Returns:
-            nn.Module: Created pooling layer.
-        """
+    Returns:
+        nn.Module: Created pooling layer.
+    """
     if cfg is None:
         cfg_ = dict(type='AvgPool2d')
     else:

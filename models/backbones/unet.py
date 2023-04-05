@@ -1,14 +1,16 @@
 import warnings
 
+import torch
 import torch.nn as nn
-from ..builder import BACKBONES
-from ..builder import build_encoder, build_decoder
 from mmcv.runner import BaseModule
+
+from ..builder import BACKBONES, build_decoder, build_encoder
 
 
 @BACKBONES.register_module()
 class UNet(BaseModule):
     """UNet backbone.
+
     This backbone is the implementation of `U-Net: Convolutional Networks
     for Biomedical Image Segmentation <https://arxiv.org/abs/1505.04597>`_.
     Args:
@@ -24,7 +26,6 @@ class UNet(BaseModule):
         of the encoder. More detail of the whole downsample rate can be found
         in UNet._check_input_divisible.
     """
-
     def __init__(self,
                  enc_cfg: dict,
                  dec_cfg: dict,
@@ -32,15 +33,15 @@ class UNet(BaseModule):
                  init_cfg=None):
         super(UNet, self).__init__(init_cfg)
 
-        self.encoder = build_encoder(enc_cfg, conv_cfg=self.conv_cfg, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg)
-        self.decoder = build_decoder(dec_cfg, conv_cfg=self.conv_cfg, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg)
+        self.encoder = build_encoder(enc_cfg)
+        self.decoder = build_decoder(dec_cfg)
 
-    def forward(self, x:torch.Tensor)->torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         skips = self.encoder(x)
         out = self.decoder(skips)
         return out
 
-    def train(self, mode=True):
+    def train(self, mode: bool = True) -> None:
         """Convert the model into training mode while keep normalization layer
         freezed."""
         super(UNet, self).train(mode)

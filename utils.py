@@ -1,12 +1,15 @@
-import torch
+from typing import Callable, List, Optional, Tuple, Union
+
 import numpy as np
+import torch
 from torch.nn import ConstantPad3d
-from typing import Union, Tuple, Optional, Callable, List
 
 
-def patches_sampler(input: torch.Tensor, patch_size: Union[int, Tuple[int, int, int]]) -> torch.Tensor:
-    """
-    Extract patches across a whole volume.
+def patches_sampler(
+        input: torch.Tensor,
+        patch_size: Union[int, Tuple[int, int, int]]) -> torch.Tensor:
+    """Extract patches across a whole volume.
+
     Args:
         input: image volume of dimensions B1[spatial_dims]
         patch_size: size of pathes, (w, h, d)
@@ -19,7 +22,8 @@ def patches_sampler(input: torch.Tensor, patch_size: Union[int, Tuple[int, int, 
     w_r = -w % patch_size[0]
     h_r = -h % patch_size[1]
     d_r = -d % patch_size[2]
-    pad_dims = (d_r // 2, d_r - d_r // 2, h_r, h_r - h_r // 2, w_r, w_r - w_r // 2)
+    pad_dims = (d_r // 2, d_r - d_r // 2, h_r, h_r - h_r // 2, w_r,
+                w_r - w_r // 2)
     cpad = ConstantPad3d(pad_dims, value=0)
     input = cpad(input).squeeze(1)
     patches = input.unfold(1, patch_size[0], patch_size[0]) \
@@ -30,10 +34,11 @@ def patches_sampler(input: torch.Tensor, patch_size: Union[int, Tuple[int, int, 
     return patches
 
 
-def one_hot(labels: torch.Tensor, dtype: torch.dtype = torch.float, dim: int = 1) -> torch.Tensor:
-    """
-    For a tensor `labels` of dimensions B1[spatial_dims], return a tensor of dimensions `BN[spatial_dims]`
-    for `num_classes` N number of classes.
+def one_hot(labels: torch.Tensor,
+            dtype: torch.dtype = torch.float,
+            dim: int = 1) -> torch.Tensor:
+    """For a tensor `labels` of dimensions B1[spatial_dims], return a tensor of
+    dimensions `BN[spatial_dims]` for `num_classes` N number of classes.
 
     Example:
 
@@ -41,7 +46,7 @@ def one_hot(labels: torch.Tensor, dtype: torch.dtype = torch.float, dim: int = 1
         Note that this will include the background label, thus a binary mask should be treated as having 2 classes.
     """
     if labels.dim() <= 0:
-        raise AssertionError("labels should have dim of 1 or more.")
+        raise AssertionError('labels should have dim of 1 or more.')
 
     # if `dim` is bigger, add singleton dim at the end
     if labels.ndim < dim + 1:
@@ -59,7 +64,8 @@ def one_hot(labels: torch.Tensor, dtype: torch.dtype = torch.float, dim: int = 1
     sh = list(labels.shape)
 
     if sh[dim] != 1:
-        raise AssertionError("labels should have a channel with length equal to one.")
+        raise AssertionError(
+            'labels should have a channel with length equal to one.')
 
     sh[dim] = num_classes
 
@@ -69,11 +75,12 @@ def one_hot(labels: torch.Tensor, dtype: torch.dtype = torch.float, dim: int = 1
     return labels
 
 
-def one_hot_l(labels: torch.Tensor, labels_list: torch.Tensor, dtype: torch.dtype = torch.float,
+def one_hot_l(labels: torch.Tensor,
+              labels_list: torch.Tensor,
+              dtype: torch.dtype = torch.float,
               dim: int = 1) -> torch.Tensor:
-    """
-    For a tensor `labels` of dimensions B1[spatial_dims], return a tensor of dimensions `BN[spatial_dims]`
-    for `num_classes` N number of classes.
+    """For a tensor `labels` of dimensions B1[spatial_dims], return a tensor of
+    dimensions `BN[spatial_dims]` for `num_classes` N number of classes.
 
     Example:
 
@@ -81,7 +88,7 @@ def one_hot_l(labels: torch.Tensor, labels_list: torch.Tensor, dtype: torch.dtyp
         Note that this will include the background label, thus a binary mask should be treated as having 2 classes.
     """
     if labels.dim() <= 0:
-        raise AssertionError("labels should have dim of 1 or more.")
+        raise AssertionError('labels should have dim of 1 or more.')
 
     # if `dim` is bigger, add singleton dim at the end
     if labels.ndim < dim + 1:
@@ -93,7 +100,9 @@ def one_hot_l(labels: torch.Tensor, labels_list: torch.Tensor, dtype: torch.dtyp
     # Transform labels into [0, 1, ..., N-1]
     # labels_list = torch.unique(labels).int()
     labels_list = labels_list.int()
-    labels = torch.where(torch.stack([labels == lab for lab in labels_list]).sum(0).bool(), labels, 0)
+    labels = torch.where(
+        torch.stack([labels == lab for lab in labels_list]).sum(0).bool(),
+        labels, 0)
     num_classes = len(labels_list)
     in_lut = torch.zeros(torch.max(labels_list) + 1, dtype=torch.float32)
     for i, lab in enumerate(labels_list):
@@ -103,7 +112,8 @@ def one_hot_l(labels: torch.Tensor, labels_list: torch.Tensor, dtype: torch.dtyp
     sh = list(labels.shape)
 
     if sh[dim] != 1:
-        raise AssertionError("labels should have a channel with length equal to one.")
+        raise AssertionError(
+            'labels should have a channel with length equal to one.')
 
     sh[dim] = num_classes
 
@@ -113,11 +123,11 @@ def one_hot_l(labels: torch.Tensor, labels_list: torch.Tensor, dtype: torch.dtyp
     return labels
 
 
-def inout_onehot(source: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tensor]:
-    """
-    For a tensor `source` and a tensor 'target' of dimensions B1[spatial_dims],
-    return a tensor of dimensions `BN[spatial_dims]`
-    for `num_classes` N number of classes.
+def inout_onehot(source: torch.Tensor,
+                 target: torch.Tensor) -> Tuple[torch.Tensor]:
+    """For a tensor `source` and a tensor 'target' of dimensions B1[spatial_dims],
+    return a tensor of dimensions `BN[spatial_dims]` for `num_classes` N number of
+    classes.
 
     Example:
 
@@ -128,10 +138,13 @@ def inout_onehot(source: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tens
     target_oh = one_hot(target)
     in_labels = torch.unique(source).int()
     tar_labels = torch.unique(target).int()
-    if (in_labels.shape != tar_labels.shape) or (in_labels != tar_labels).any():
+    if (in_labels.shape != tar_labels.shape) or (in_labels !=
+                                                 tar_labels).any():
         # raise AssertionError(f"ground truth has different shape ({target.shape}) from input ({input.shape})")
         labels_list = torch.tensor(
-            np.intersect1d(in_labels.cpu().numpy(), tar_labels.cpu().numpy(), assume_unique=True))
+            np.intersect1d(in_labels.cpu().numpy(),
+                           tar_labels.cpu().numpy(),
+                           assume_unique=True))
         source_oh = one_hot_l(source, labels_list)
         target_oh = one_hot_l(target, labels_list)
         assert source_oh.shape == target_oh.shape

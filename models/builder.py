@@ -49,6 +49,7 @@ def build_loss(cfg: dict) -> Module:
 
 def build_encoder(cfg: dict) -> Module:
     """Build encoder for flow estimator.
+
     Args:
         cfg (dict): Config for encoder.
     Returns:
@@ -59,6 +60,7 @@ def build_encoder(cfg: dict) -> Module:
 
 def build_decoder(cfg: dict) -> Module:
     """Build decoder for flow estimator.
+
     Args:
         cfg (dict): Config for decoder.
     Returns:
@@ -69,9 +71,21 @@ def build_decoder(cfg: dict) -> Module:
 
 def build_flow_estimator(cfg: dict) -> Module:
     """Build flow estimator.
+
     Args:
         cfg (dict): Config for optical flow estimator.
     Returns:
         Module: Flow estimator.
     """
     return build(cfg, FLOW_ESTIMATORS)
+
+
+def build_backbone(cfg: dict) -> Module:
+    """Build backbone.
+
+    Args:
+        cfg (dict): Config for optical flow estimator.
+    Returns:
+        Module: Backbone.
+    """
+    return build(cfg, BACKBONES)
