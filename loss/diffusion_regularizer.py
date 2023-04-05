@@ -74,7 +74,7 @@ class GradientDiffusionLoss(_Loss):
         # Using forward mode to be consistent with voxelmorph paper
         first_order_gradient = [spatial_gradient(pred, dim, mode='forward') for dim in range(2, pred.ndim)]
 
-        loss = torch.tensor(0)
+        loss = torch.tensor(0).float().to(pred.device)
         for dim, g in enumerate(first_order_gradient):
             if self.penalty == 'l1':
                 loss += torch.mean(torch.abs(first_order_gradient[dim]))
