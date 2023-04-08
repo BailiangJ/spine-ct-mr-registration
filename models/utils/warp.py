@@ -1,20 +1,20 @@
-from typing import Sequence, List
+from typing import List, Sequence
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 
 class Warp(nn.Module):
-    """
-    Warp an image with given flow / dense displacement field (DDF).
+    """Warp an image with given flow / dense displacement field (DDF).
 
     Args:
         image_size (Sequence[int]): size of input image.
         interp_mode (str): interpolation mode. ["nearest", "bilinear", "bicubic"]
     """
-
-    def __init__(self, image_size: Sequence[int], interp_mode: str = 'bilinear') -> None:
+    def __init__(self,
+                 image_size: Sequence[int],
+                 interp_mode: str = 'bilinear') -> None:
         super().__init__()
 
         self.ndim = len(image_size)
@@ -44,7 +44,9 @@ class Warp(nn.Module):
             grid: torch.FloatTensor
 
         """
-        mesh_points = [torch.arange(0, dim, dtype=torch.float) for dim in image_size]
+        mesh_points = [
+            torch.arange(0, dim, dtype=torch.float) for dim in image_size
+        ]
         grid = torch.stack(torch.meshgrid(*mesh_points),
                            dim=0)  # (spatial_dims, ...)
         return grid
@@ -73,4 +75,7 @@ class Warp(nn.Module):
         # F.grid_sample takes grid in a reverse order
         sample_grid = sample_grid[..., index_ordering]  # x,y,z -> z,y,x
 
-        return F.grid_sample(image, sample_grid, align_corners=True, mode=self.interp_mode)
+        return F.grid_sample(image,
+                             sample_grid,
+                             align_corners=True,
+                             mode=self.interp_mode)

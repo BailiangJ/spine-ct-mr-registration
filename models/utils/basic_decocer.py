@@ -159,7 +159,7 @@ class BasicDecoder(BaseModule):
                 kernel_size_ = self.kernel_size
             else:
                 raise TypeError('kernel_size must be list, tuple or int, '
-                          f'but got {type(kernel_size)}')
+                                f'but got {type(kernel_size)}')
 
             self.decoder.append(
                 self._make_layer(

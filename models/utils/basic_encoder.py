@@ -158,7 +158,7 @@ class BasicEncoder(BaseModule):
                 kernel_size_ = self.kernel_size
             else:
                 raise TypeError('kernel_size must be list, tuple or int, '
-                          f'but got {type(kernel_size)}')
+                                f'but got {type(kernel_size)}')
 
             if i != 0 and self.pool_cfg:
                 pool_cfg_ = self.pool_cfg

@@ -28,7 +28,6 @@ class UNet(BaseModule):
         of the encoder. More detail of the whole downsample rate can be found
         in UNet._check_input_divisible.
     """
-
     def __init__(self,
                  enc_cfg: dict,
                  dec_cfg: dict,
