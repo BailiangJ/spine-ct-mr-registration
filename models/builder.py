@@ -1,11 +1,11 @@
 from typing import Optional, Sequence, Union
 
 import torch.nn as nn
-from mmengine import MODELS as MMENGINE_MODELS
-from mmengine import Registry, build_from_cfg
+from mmcv.cnn import MODELS as MMCV_MODELS
+from mmcv.utils import Registry, build_from_cfg
 from torch.nn import Module
 
-MODELS = Registry('models', parent=MMENGINE_MODELS)
+MODELS = Registry('models', parent=MMCV_MODELS)
 LOSSES = MODELS
 ENCODERS = MODELS
 DECODERS = MODELS

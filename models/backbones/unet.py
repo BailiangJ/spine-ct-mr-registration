@@ -15,8 +15,8 @@ class UNet(BaseModule):
     This backbone is the implementation of `U-Net: Convolutional Networks
     for Biomedical Image Segmentation <https://arxiv.org/abs/1505.04597>`_.
     Args:
-        enc_cfg (dict): Config dict for encoder.
-        dec_cfg (dict): Config dict for decoder.
+        encoder_cfg (dict): Config dict for encoder.
+        decoder_cfg (dict): Config dict for decoder.
         remain_cfg (dict): Config dict for remaining convolutions.
         norm_eval (bool): Whether to set norm layers to eval mode, namely,
             freeze running stats (mean and var). Note: Effect on Batch Norm
@@ -29,16 +29,16 @@ class UNet(BaseModule):
         in UNet._check_input_divisible.
     """
     def __init__(self,
-                 enc_cfg: dict,
-                 dec_cfg: dict,
+                 encoder_cfg: dict,
+                 decoder_cfg: dict,
                  remain_cfg: dict,
                  norm_eval: bool = False,
                  init_cfg: Optional[dict] = None):
         super(UNet, self).__init__(init_cfg)
 
         self.norm_eval = norm_eval
-        self.encoder = build_encoder(enc_cfg)
-        self.decoder = build_decoder(dec_cfg)
+        self.encoder = build_encoder(encoder_cfg)
+        self.decoder = build_decoder(decoder_cfg)
         self.remain = build_encoder(remain_cfg)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
