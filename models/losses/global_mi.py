@@ -3,13 +3,14 @@ from typing import Sequence, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-from monai.util.module import look_up_option
 from monai.utils.enums import LossReduction
+from monai.utils.module import look_up_option
 from torch.nn.modules.loss import _Loss
+
 from ..builder import LOSSES
 
 
-@LOSSES.register_module()
+@LOSSES.register_module('global_mi')
 class GlobalMutualInformationLoss(_Loss):
     """Differentiable global mutual information loss via Parzen windowing method.
 
@@ -18,15 +19,14 @@ class GlobalMutualInformationLoss(_Loss):
     Reference:
         https://dspace.mit.edu/handle/1721.1/123142, Section 3.1, equation 3.1-3.5, Algorithm 1
     """
-
     def __init__(
-            self,
-            kernel_type: str = 'gaussian',
-            num_bins: int = 23,
-            sigma_ratio: float = 0.5,
-            reduction: Union[LossReduction, str] = LossReduction.MEAN,
-            smooth_nr: float = 1e-7,
-            smooth_dr: float = 1e-7,
+        self,
+        kernel_type: str = 'gaussian',
+        num_bins: int = 23,
+        sigma_ratio: float = 0.5,
+        reduction: Union[LossReduction, str] = LossReduction.MEAN,
+        smooth_nr: float = 1e-7,
+        smooth_dr: float = 1e-7,
     ) -> None:
         """
         Args:
@@ -62,7 +62,7 @@ class GlobalMutualInformationLoss(_Loss):
         self.num_bins = num_bins
         self.kernel_type = kernel_type
         if self.kernel_type == 'gaussian':
-            self.preterm = 1 / (2 * sigma ** 2)
+            self.preterm = 1 / (2 * sigma**2)
             self.bin_centers = bin_centers[None, None, ...]
         self.smooth_nr = float(smooth_nr)
         self.smooth_dr = float(smooth_dr)
@@ -135,11 +135,11 @@ class GlobalMutualInformationLoss(_Loss):
                                0.5) + (sample_bin_matrix == 0.5) * 0.5
         elif order == 3:
             weight = (
-                    weight +
-                    (4 - 6 * sample_bin_matrix ** 2 + 3 * sample_bin_matrix ** 3) *
-                    (sample_bin_matrix < 1) / 6)
-            weight = weight + (2 - sample_bin_matrix) ** 3 * (
-                    sample_bin_matrix >= 1) * (sample_bin_matrix < 2) / 6
+                weight +
+                (4 - 6 * sample_bin_matrix**2 + 3 * sample_bin_matrix**3) *
+                (sample_bin_matrix < 1) / 6)
+            weight = weight + (2 - sample_bin_matrix)**3 * (
+                sample_bin_matrix >= 1) * (sample_bin_matrix < 2) / 6
         else:
             raise ValueError(
                 f'Do not support b-spline {order}-order parzen windowing')
@@ -161,7 +161,7 @@ class GlobalMutualInformationLoss(_Loss):
         img = torch.clamp(img, 0, 1)
         img = img.reshape(img.shape[0], -1, 1)  # (batch, num_sample, 1)
         weight = torch.exp(-self.preterm.to(img) *
-                           (img - self.bin_centers.to(img)) **
+                           (img - self.bin_centers.to(img))**
                            2)  # (batch, num_sample, num_bin)
         weight = weight / torch.sum(
             weight, dim=-1, keepdim=True)  # (batch, num_sample, num_bin)

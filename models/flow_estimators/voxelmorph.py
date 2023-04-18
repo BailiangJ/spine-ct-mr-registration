@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 from mmcv.runner import BaseModule
 
-from ..backbones import UNet
 from ..builder import FLOW_ESTIMATORS, build_backbone, build_encoder
 from ..utils import BasicConvBlock
 

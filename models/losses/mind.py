@@ -1,6 +1,9 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import ConstantPad3d, ReplicationPad3d
+
 from ..builder import LOSSES
 
 
@@ -12,7 +15,7 @@ def pdist_squared(x: torch.Tensor) -> torch.Tensor:
     Returns:
         dist: pairwise distance matrix, (#input points, #input points)
     """
-    xx = (x ** 2).sum(dim=1).unsqueeze(2)
+    xx = (x**2).sum(dim=1).unsqueeze(2)
     yy = xx.permute(0, 2, 1)
     dist = xx + yy - 2.0 * torch.bmm(x.permute(0, 2, 1), x)
     dist[dist != dist] = 0
@@ -20,7 +23,7 @@ def pdist_squared(x: torch.Tensor) -> torch.Tensor:
     return dist
 
 
-@LOSSES.register_module()
+@LOSSES.register_module('mind')
 class MINDSSCLoss(nn.Module):
     """
     Modality-Independent Neighbourhood Descriptor Dissimilarity Loss for Image Registration
@@ -31,27 +34,25 @@ class MINDSSCLoss(nn.Module):
         dilation (int): the dilation of neighbourhood patches.
         penalty (str): the penalty mode of mind dissimilarity loss.
     """
-
-    def __init__(self,
-                 radius: int = 2,
-                 dilation: int = 2,
-                 penalty: str = 'l2',
-                 ) -> None:
+    def __init__(
+        self,
+        radius: int = 2,
+        dilation: int = 2,
+        penalty: str = 'l2',
+    ) -> None:
         super().__init__()
         self.kernel_size = radius * 2 + 1
         self.dilation = dilation
         self.radius = radius
         self.penalty = penalty
-        self.mshift1, self.mshift2, self.rpad1, self.rpad2 = self.build_kernels()
+        self.mshift1, self.mshift2, self.rpad1, self.rpad2 = self.build_kernels(
+        )
 
     def build_kernels(self):
         # define start and end locations for self-similarity pattern
-        six_neighbourhood = torch.Tensor([[0, 1, 1],
-                                          [1, 1, 0],
-                                          [1, 0, 1],
-                                          [1, 1, 2],
-                                          [2, 1, 1],
-                                          [1, 2, 1]]).long()
+        six_neighbourhood = torch.Tensor([[0, 1, 1], [1, 1, 0], [1, 0, 1],
+                                          [1, 1, 2], [2, 1, 1], [1, 2,
+                                                                 1]]).long()
 
         # squared distances
         dist = pdist_squared(six_neighbourhood.t().unsqueeze(0)).squeeze(0)
@@ -62,14 +63,20 @@ class MINDSSCLoss(nn.Module):
 
         # build kernel
         # self-similarity context: 12 elements
-        idx_shift1 = six_neighbourhood.unsqueeze(1).repeat(1, 6, 1).view(-1, 3)[mask, :]
+        idx_shift1 = six_neighbourhood.unsqueeze(1).repeat(1, 6,
+                                                           1).view(-1,
+                                                                   3)[mask, :]
         mshift1 = torch.zeros(12, 1, 3, 3, 3)
-        mshift1.view(-1)[torch.arange(12) * 27 + idx_shift1[:, 0] * 9 + idx_shift1[:, 1] * 3 + idx_shift1[:, 2]] = 1
+        mshift1.view(-1)[torch.arange(12) * 27 + idx_shift1[:, 0] * 9 +
+                         idx_shift1[:, 1] * 3 + idx_shift1[:, 2]] = 1
         mshift1.requires_grad = False
 
-        idx_shift2 = six_neighbourhood.unsqueeze(0).repeat(6, 1, 1).view(-1, 3)[mask, :]
+        idx_shift2 = six_neighbourhood.unsqueeze(0).repeat(6, 1,
+                                                           1).view(-1,
+                                                                   3)[mask, :]
         mshift2 = torch.zeros(12, 1, 3, 3, 3)
-        mshift2.view(-1)[torch.arange(12) * 27 + idx_shift2[:, 0] * 9 + idx_shift2[:, 1] * 3 + idx_shift2[:, 2]] = 1
+        mshift2.view(-1)[torch.arange(12) * 27 + idx_shift2[:, 0] * 9 +
+                         idx_shift2[:, 1] * 3 + idx_shift2[:, 2]] = 1
         mshift2.requires_grad = False
 
         # maintain the output size
@@ -81,36 +88,45 @@ class MINDSSCLoss(nn.Module):
         mshift1 = self.mshift1.to(img)
         mshift2 = self.mshift2.to(img)
         # compute patch-ssd
-        ssd = F.avg_pool3d(self.rpad2((F.conv3d(self.rpad1(img), mshift1, dilation=self.dilation) -
-                                       F.conv3d(self.rpad1(img), mshift2, dilation=self.dilation)) ** 2),
-                           self.kernel_size, stride=1)
+        ssd = F.avg_pool3d(self.rpad2(
+            (F.conv3d(self.rpad1(img), mshift1, dilation=self.dilation) -
+             F.conv3d(self.rpad1(img), mshift2, dilation=self.dilation))**2),
+                           self.kernel_size,
+                           stride=1)
 
         # MIND equation
         mind = ssd - torch.min(ssd, 1, keepdim=True)[0]
         mind_var = torch.mean(mind, 1, keepdim=True)
-        mind_var = torch.clamp(mind_var, mind_var.mean() * 0.001, mind_var.mean() * 1000)
-        mind /= mind_var
+        mind_var = torch.clamp(mind_var,
+                               mind_var.mean() * 0.001,
+                               mind_var.mean() * 1000)
+        mind = torch.div(mind, mind_var)
         mind = torch.exp(-mind)
 
         # permute to have same ordering as C++ code
-        mind = mind[:, torch.Tensor([6, 8, 1, 11, 2, 10, 0, 7, 9, 4, 5, 3]).long(), :, :, :]
+        mind = mind[:,
+                    torch.Tensor([6, 8, 1, 11, 2, 10, 0, 7, 9, 4, 5, 3]).long(
+                    ), :, :, :]
 
         return mind
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, source: torch.Tensor,
+                target: torch.Tensor) -> torch.Tensor:
         """Compute the MIND-SSC loss.
 
         Args:
-            input: the predicted image.
-            target: the ground truth image.
+            source: source image, tensor of shape [BNHWD].
+            target: target image, tensor fo shape [BNHWD].
         """
-        assert input.shape == target.shape, 'input and target must have the same shape.'
+        assert source.shape == target.shape, 'input and target must have the same shape.'
         if self.penalty == 'l1':
-            mind_loss = torch.abs(self.mind(input) - self.mind(target))
+            mind_loss = torch.abs(self.mind(source) - self.mind(target))
         elif self.penalty == 'l2':
-            mind_loss = torch.square(self.mind(input) - self.mind(target))
+            mind_loss = torch.square(self.mind(source) - self.mind(target))
         else:
-            raise ValueError(f'Unsupported penalty mode: {self.penalty}, available modes are l1 and l2.')
+            raise ValueError(
+                f'Unsupported penalty mode: {self.penalty}, available modes are l1 and l2.'
+            )
 
         return torch.mean(mind_loss)  # the batch and channel average
 

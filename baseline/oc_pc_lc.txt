@@ -1,0 +1,91 @@
+//ImageTypes
+(FixedImagePixelType "float")
+(FixedImageDimension 3)
+(MovingImagePixelType "float")
+(MovingImageDimension 3)
+
+(UseDirectionCosines "true")
+
+//Components
+//(Registration "MultiResolutionRegistration")
+(Registration "MultiMetricMultiResolutionRegistration")
+(Metric "AdvancedMattesMutualInformation" "TransformRigidityPenalty")
+
+(FixedImagePyramid "FixedRecursiveImagePyramid")
+(MovingImagePyramid "MovingRecursiveImagePyramid")
+
+(Interpolator "BSplineInterpolator")
+(ResampleInterpolator "FinalBSplineInterpolator")
+(Resampler "DefaultResampler")
+
+(Optimizer "StandardGradientDescent")
+//(Optimizer "AdaptiveStochasticGradientDescent")
+(Transform "BSplineTransform")
+
+//Mattes Mutual Information
+(NumberOfHistogramBins 64 64 100)
+
+// Transform
+(FinalGridSpacing 8.0)
+(UpsampleGridOption "true")
+(AutomaticScalesEstimation "true")
+
+// Multi resolution
+(NumberOfResolutions 3)
+(ImagePyramidSchedule 4 4 4 2 2 2 1 1 1)
+
+// Sampling
+(NewSamplesEveryIteration "true")
+(NumberOfSpatialSamples 65536)
+(ImageSampler "Random")
+//(ErodeMask "true" "true")
+
+
+// Interpolation and resampling
+(BSplineInterpolationOrder 3)
+(FinalBSplineInterpolationOrder 3)
+(DefaultPixelValue -1024)
+
+// Output and other
+(WriteTransformParametersEachIteration "false")
+(WriteTransformParametersEachResolution "true")
+(ShowExactMetricValue "false")
+(WriteResultImageAfterEachResolution "false")
+
+
+// Optimiser
+// SP: a_k = a/(A+k+1)^alpha
+(MaximumNumberOfIterations 500)
+//(SP_a 20000.0)
+//(SP_alpha 0.602)
+//(SP_A 100.0)
+//(MaximumNumberOfIterations 3000 3000 3000 5000)
+(SP_a 150000.0 120000.0 70000.0 20000.0)
+(SP_alpha 0.602 0.602 0.602 0.602)
+(SP_A 100.0 100.0 100.0 100.0)
+
+
+// MMIWRR specific
+//(Metric0Weight 4.0)
+(Metric0Weight 0.1)
+(Metric1Weight 0.5)
+//(Metric0Weight 0.1)
+//(Metric1Weight 0.5)
+(LinearityConditionWeight 1.0)
+(OrthonormalityConditionWeight 0.1)
+(PropernessConditionWeight 0.1)
+(UseLinearityCondition "false")
+(UseOrthonormalityCondition "true")
+(UsePropernessCondition "true")
+(CalculateLinearityCondition "true")
+(CalculateOrthonormalityCondition "true")
+(CalculatePropernessCondition "true")
+//(DilateRigidityImages "true")
+(DilateRigidityImages "false" "false" "false" "true")
+(DilationRadiusMultiplier 1.0)
+(UseFixedRigidityImage "false")
+(UseMovingRigidityImage "true")
+
+//(MovingRigidityImageName "/source_mask.nii.gz")
+(MovingRigidityImageName "/ct_mask_oh.nii.gz")
+

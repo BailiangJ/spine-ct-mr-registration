@@ -61,16 +61,21 @@ class Warp(nn.Module):
         Returns:
             torch.Tensor: Warped image.
         """
-        assert self.image_size == image.shape[2:] == flow.shape[2:]
+        assert self.image_size == list(image.shape[2:]) == list(flow.shape[2:])
 
         # deformation
+        # [BNHWD]
         sample_grid = self.grid + flow
 
         # normalize
         # F.grid_sample takes normalized grid with range of [-1,1]
         for i, dim in enumerate(self.image_size):
-            sample_grid[..., i] = sample_grid[..., i] * 2 / (dim - 1) - 1
+            sample_grid[:, i, ...] = sample_grid[:, i, ...] * 2 / (dim - 1) - 1
 
+        # [BNHWD] -> [BHWDN]
+        # [X,Y,Z, [x,y,z]]
+        sample_grid = sample_grid.permute([0] + list(range(2, 2 + self.ndim)) +
+                                          [1])
         index_ordering: List[int] = list(range(self.ndim - 1, -1, -1))
         # F.grid_sample takes grid in a reverse order
         sample_grid = sample_grid[..., index_ordering]  # x,y,z -> z,y,x

@@ -5,9 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+
+from ..builder import LOSSES
 from .kernels import (gradient_kernel_1d, gradient_kernel_2d,
                       gradient_kernel_3d, spatial_filter_nd)
-from ..builder import LOSSES
 
 
 def _grad_param(ndim, method, axis):
@@ -25,7 +26,7 @@ def _grad_param(ndim, method, axis):
 
 
 # TODO: extend to flexible batch_size and 2D
-@LOSSES.register_module()
+@LOSSES.register_module('oc_pc')
 class OrthonormalPropernessCondition(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -80,13 +81,16 @@ class OrthonormalPropernessCondition(nn.Module):
 
         return grad_deform
 
-    def forward(self, disp: torch.Tensor,
-                y_source_oh: torch.Tensor) -> Sequence[torch.Tensor]:
+    def forward(self,
+                y_source_oh: torch.Tensor,
+                source_oh: None,
+                disp_field: torch.Tensor,
+                neg_flow: None) -> Sequence[torch.Tensor]:
         """
         Compute the orthonormality condition of displacement field
         Args:
-            disp (torch.tensor): the shape should be BCHWD, with B=1, C=3
             y_source_oh (torch.tensor): (hard) one-hot format, the shape should be BNHW[D]
+            disp_field (torch.tensor): the shape should be BCHWD, with B=1, C=3
 
         Returns:
             E_oc (torch.tensor): the orthonormality condition energy
@@ -97,7 +101,7 @@ class OrthonormalPropernessCondition(nn.Module):
         y_source_oh = y_source_oh.squeeze().sum(dim=0)
         # neg_y_source_oh = 1 - y_source_oh
 
-        grad_deform = self.first_order_derivative(disp)
+        grad_deform = self.first_order_derivative(disp_field)
 
         # compute the Jacobian determinant
         pc = grad_deform[0, 0, ...] * (
@@ -118,7 +122,7 @@ class OrthonormalPropernessCondition(nn.Module):
 
         # (9,1,H,W,D)
         oc = oc.flatten(start_dim=0, end_dim=1) - torch.eye(3, 3).view(
-            9, 1, 1, 1, 1).to(disp)
+            9, 1, 1, 1, 1).to(disp_field)
         # (1,H,W,D)
         E_oc = torch.sum(oc ** 2, dim=0)
         E_oc = E_oc.squeeze()

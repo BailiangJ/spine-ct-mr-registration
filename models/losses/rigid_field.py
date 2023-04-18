@@ -1,36 +1,36 @@
-from typing import List, Sequence, Tuple, Union, Optional
+from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .rigid_utils import (get_mass_center, get_reference_grid, sample_correspondence,
-                          sample_displacement_flow, solve_SVD)
-from ..utils import ResizeFlow
 from ..builder import LOSSES
+from ..utils import ResizeFlow
+from .rigid_utils import (get_mass_center, get_reference_grid,
+                          sample_correspondence, sample_displacement_flow,
+                          solve_SVD)
 
 
-@LOSSES.register_module()
+@LOSSES.register_module('rigid_field')
 class RigidFieldLoss(nn.Module):
     """Compute rigid motion between input one-hot mask and target one-hot mask using
-    SVD."""
+    SVD.
 
-    def __init__(self,
-                 image_size: Sequence[int] = (64, 128, 128),
-                 num_samples: int = 256,
-                 downsize: int = 2,
-                 inv: bool = False,
-                 include_background: bool = False,
-                 dtype=torch.float32,
-                 device='cpu'):
-        """
-
-        Args:
+    Args:
             image_size: shape of input image
             num_samples: int, number of sampling correspondences
             downsize: int, downsampling factor for computer field MSE loss
             inv: bool, flag deciding the direction of sampling correspondences
-        """
+    """
+    def __init__(
+            self,
+            image_size: Sequence[int] = (64, 128, 128),
+            num_samples: int = 256,
+            # downsize: int = 2,
+            inv: bool = False,
+            include_background: bool = False,
+            dtype=torch.float32,
+            device='cpu') -> None:
         super().__init__()
         self._image_size = image_size
         self._dim = len(self._image_size)
@@ -43,7 +43,7 @@ class RigidFieldLoss(nn.Module):
         self.num_samples = num_samples
         self.inv = inv
         self.include_background = include_background
-        self.resize = ResizeFlow(scale_factor=downsize, ndim=self._dim)
+        # self.resize = ResizeFlow(scale_factor=downsize, ndim=self._dim)
 
     def lsq_rigid_motion(self, y_source_pnts_list: Sequence[torch.Tensor],
                          source_pnts_list: Sequence[torch.Tensor],
@@ -75,8 +75,10 @@ class RigidFieldLoss(nn.Module):
             R, t = solve_SVD(y_source_pnts, source_pnts, y_source_cm,
                              source_cm)
 
-            trans_matrix_pos = torch.diag(torch.ones(4,dtype=self._dtype, device=self._device))
-            trans_matrix_rot = torch.diag(torch.ones(4,dtype=self._dtype, device=self._device))
+            trans_matrix_pos = torch.diag(
+                torch.ones(4, dtype=self._dtype, device=self._device))
+            trans_matrix_rot = torch.diag(
+                torch.ones(4, dtype=self._dtype, device=self._device))
 
             trans_matrix_pos[:3, [3]] = t
             trans_matrix_rot[:3, :3] = R
@@ -88,8 +90,11 @@ class RigidFieldLoss(nn.Module):
         transform_matrices = torch.stack(trans_matrix_list, dim=0)
         return transform_matrices[:, :3, :]
 
-    def forward(self, y_source_oh: torch.Tensor, source_oh: torch.Tensor,
-                flow: torch.Tensor, neg_flow: Optional[torch.Tensor]=None) -> torch.Tensor:
+    def forward(self,
+                y_source_oh: torch.Tensor,
+                source_oh: torch.Tensor,
+                flow: torch.Tensor,
+                neg_flow: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
 
         Args:
@@ -120,10 +125,10 @@ class RigidFieldLoss(nn.Module):
 
             if self.inv and neg_flow is not None:
                 source_pnts_list, y_source_pnts_list = sample_correspondence(
-                    source_oh, neg_flow)
+                    source_oh, neg_flow, self.num_samples)
             else:
                 y_source_pnts_list, source_pnts_list = sample_correspondence(
-                    y_source_oh, flow)
+                    y_source_oh, flow, self.num_samples)
 
             transform_matrices = self.lsq_rigid_motion(y_source_pnts_list,
                                                        source_pnts_list,
@@ -137,7 +142,6 @@ class RigidFieldLoss(nn.Module):
             rigid_flow = torch.einsum('qijk,bpq->bpijk', self.grid,
                                       transform_matrices.reshape(-1, 3, 4))
             rigid_flow = rigid_flow - self.grid[None, :3, ...]
-
 
             # (1,3,HWD), select displacement flow inside label areas
             rigid_flow = torch.sum(rigid_flow * y_source_oh,
@@ -154,6 +158,17 @@ class RigidFieldLoss(nn.Module):
         # the final output of the registration head is downsized flow
         # flow = self.resize(flow)
 
-        loss = torch.mean(torch.linalg.norm(rigid_flow - flow, dim=1))
-        # loss = torch.linalg.norm(rigid_flow - flow, dim=1) / torch.sum(y_source_oh, dim=(0, 2, 3, 4))
+        # loss = torch.mean(torch.linalg.norm(rigid_flow - flow, dim=1))
+        loss = torch.linalg.norm(rigid_flow - flow,
+                                 dim=1).sum() / y_source_oh.sum()
         return loss
+
+    def __repr__(self) -> str:
+        repr_str = self.__class__.__name__
+        repr_str += (f'(image_size={self._image_size},'
+                     f'num_samples={self.num_samples},'
+                     f'inv={self.inv},'
+                     f'include_background={self.include_background},'
+                     f'dtype={self._dtype},'
+                     f'device={self._device})')
+        return repr_str

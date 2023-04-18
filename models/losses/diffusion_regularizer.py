@@ -1,9 +1,10 @@
-from typing import Sequence, Union, Optional
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from ..builder import LOSSES
 
 
@@ -49,10 +50,10 @@ def spatial_gradient(x: torch.Tensor,
         )
 
 
+@LOSSES.register_module('diffusion')
 class GradientDiffusionLoss(nn.Module):
     """Calculate the diffusion regularizer (smoothness regularizer) on the spatial
     gradients of displacement/velocity field."""
-
     def __init__(self,
                  penalty: Union[int, str] = 'l1',
                  loss_mult: Optional[float] = None) -> None:
@@ -65,7 +66,7 @@ class GradientDiffusionLoss(nn.Module):
         self.penalty = penalty
         self.loss_mult = loss_mult
 
-    def forward(self, _, pred: torch.Tensor) -> torch.Tensor:
+    def forward(self, pred: torch.Tensor) -> torch.Tensor:
         """
         Args:
             pred: the shape should be BCH(WD)
@@ -97,7 +98,7 @@ class GradientDiffusionLoss(nn.Module):
             if self.penalty == 'l1':
                 loss += torch.mean(torch.abs(first_order_gradient[dim]))
             elif self.penalty == 'l2':
-                loss += torch.mean(first_order_gradient[dim] ** 2)
+                loss += torch.mean(first_order_gradient[dim]**2)
             else:
                 raise ValueError(
                     f'Unsupported norm: {self.penalty}, available options are ["l1","l2"].'

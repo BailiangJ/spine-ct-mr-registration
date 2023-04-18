@@ -1,19 +1,23 @@
 from typing import Optional, Sequence, Union
 
 import torch.nn as nn
-from mmcv.cnn import MODELS as MMCV_MODELS
-from mmcv.utils import Registry, build_from_cfg
+from mmengine import MODELS as MMENGINE_MODELS
+from mmengine import Config, ConfigDict, Registry, build_from_cfg
 from torch.nn import Module
 
-MODELS = Registry('models', parent=MMCV_MODELS)
+MODELS = Registry('models', parent=MMENGINE_MODELS)
 LOSSES = MODELS
 ENCODERS = MODELS
 DECODERS = MODELS
 FLOW_ESTIMATORS = MODELS
 BACKBONES = MODELS
+METRICS = MODELS
+REGISTRATION_HEAD = MODELS
+
+CFG = Union[dict, Config, ConfigDict]
 
 
-def build(cfg: Union[Sequence[dict], dict],
+def build(cfg: Union[Sequence[CFG], CFG],
           registry: Registry,
           default_args: Optional[dict] = None):
     """Build a module.
@@ -44,7 +48,20 @@ def build_loss(cfg: dict) -> Module:
     Returns:
         Module: Loss function.
     """
-    return build(cfg, LOSSES)
+    cfg_ = cfg.copy()
+    cfg_.pop('weight', None)
+    return build(cfg_, LOSSES)
+
+
+def build_metrics(cfg: dict) -> Module:
+    """Build metric function.
+
+    Args:
+        cfg (dict): Config for encoder.
+    Returns:
+        Module: Metric function.
+    """
+    return build(cfg, METRICS)
 
 
 def build_encoder(cfg: dict) -> Module:
@@ -89,3 +106,14 @@ def build_backbone(cfg: dict) -> Module:
         Module: Backbone.
     """
     return build(cfg, BACKBONES)
+
+
+def build_registration_head(cfg: dict) -> Module:
+    """Build registration head.
+
+    Args:
+        cfg (dict): Config for registration head.
+    Returns:
+        Module: Registration head.
+    """
+    return build(cfg, REGISTRATION_HEAD)
