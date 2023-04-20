@@ -1,14 +1,19 @@
 import os
 import sys
+
 import numpy as np
 import torch
 
 sys.path.append('../')
-from models import build_flow_estimator, build_registration_head, SDlogDetJac, RigidDiceLoss
-from datasets import load_test_data
-from monai.data import DataLoader
-from monai.metrics import DiceMetric, HausdorffDistanceMetric, SurfaceDistanceMetric
 from mmengine import Config
+from monai.data import DataLoader
+from monai.metrics import (DiceMetric, HausdorffDistanceMetric,
+                           SurfaceDistanceMetric)
+
+from datasets import load_test_data
+from models import (RigidDiceLoss, SDlogDetJac, build_flow_estimator,
+                    build_registration_head)
+
 from .utils import set_seed
 
 
@@ -24,17 +29,17 @@ def inference(config_file: str):
 
     # load data
     test_dataset = load_test_data(**cfg.testset_cfg)
-    test_loader = DataLoader(test_dataset,
-                             batch_size=1,
-                             shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     # metric functions
     compute_jacdet = SDlogDetJac()
-    compute_dice = DiceMetric(include_background=False, reduction="mean")
-    compute_haus95_dist = HausdorffDistanceMetric(percentile=95, include_background=False)
+    compute_dice = DiceMetric(include_background=False, reduction='mean')
+    compute_haus95_dist = HausdorffDistanceMetric(percentile=95,
+                                                  include_background=False)
 
     # rigid losses
-    compute_rigid_dice = RigidDiceLoss(include_background=False, reduction='mean')
+    compute_rigid_dice = RigidDiceLoss(include_background=False,
+                                       reduction='mean')
 
     for i, data in enumerate(test_loader):
         target = data['mr'].to(cfg.device).float()
@@ -45,7 +50,9 @@ def inference(config_file: str):
         image_size = list(target.shape[-3:])
 
         # one-hot label with shape [BNHWD] B=1
-        mask = torch.logical_and(target_oh.sum(dim=(2, 3, 4)) > 500, source_oh.sum(dim=(2, 3, 4)) > 500)
+        mask = torch.logical_and(
+            target_oh.sum(dim=(2, 3, 4)) > 500,
+            source_oh.sum(dim=(2, 3, 4)) > 500)
         target_oh = target_oh[mask].unsqueeze(0)
         source_oh = source_oh[mask].unsqueeze(0)
 
@@ -58,14 +65,16 @@ def inference(config_file: str):
         # forward run
         with torch.no_grad():
             flow = model(source, target)
-            fwd_flow, bck_flow, y_source, y_target, y_source_oh, y_target_oh = register(flow, source, target, source_oh,
-                                                                                        target_oh)
+            fwd_flow, bck_flow, y_source, y_target, y_source_oh, y_target_oh = register(
+                flow, source, target, source_oh, target_oh)
 
-            sdlog_jacdet, non_pos_jacdet = compute_jacdet(fwd_flow.detach().cpu())
+            sdlog_jacdet, non_pos_jacdet = compute_jacdet(
+                fwd_flow.detach().cpu())
             fwd_dice = compute_dice(y_source_oh, target_oh)
             fwd_haus95_dist = compute_haus95_dist(y_source_oh, target_oh)
             with torch.enable_grad():
-                rigid_dice = compute_rigid_dice(y_source_oh, source_oh, fwd_flow, bck_flow)
+                rigid_dice = compute_rigid_dice(y_source_oh, source_oh,
+                                                fwd_flow, bck_flow)
 
             print(f'data {i} - '
                   f'sdlog_jacdet:{sdlog_jacdet:.2f},'

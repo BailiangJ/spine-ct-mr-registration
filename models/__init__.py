@@ -18,11 +18,12 @@ from .utils import (POOLING_LAYERS, UPSAMPLE_LAYERS, BasicConvBlock,
 __all__ = [
     'MODELS', 'LOSSES', 'METRICS', 'ENCODERS', 'DECODERS', 'FLOW_ESTIMATORS',
     'BACKBONES', 'POOLING_LAYERS', 'UPSAMPLE_LAYERS', 'build',
-    'build_backbone', 'build_loss','build_metrics', 'build_flow_estimator', 'build_decoder',
-    'build_encoder', 'build_pooling_layer', 'BasicEncoder', 'BasicDecoder',
-    'BasicConvBlock', 'DeconvModule', 'InterpConv', 'UpConvBlock', 'Warp',
-    'VecIntegrate', 'RegistrationHead', 'ResizeFlow', 'UNet', 'VoxelMorph',
-    'GradientDiffusionLoss', 'GlobalMutualInformationLoss', 'MINDSSCLoss',
+    'build_backbone', 'build_loss', 'build_metrics', 'build_flow_estimator',
+    'build_decoder', 'build_encoder', 'build_pooling_layer', 'BasicEncoder',
+    'BasicDecoder', 'BasicConvBlock', 'DeconvModule', 'InterpConv',
+    'UpConvBlock', 'Warp', 'VecIntegrate', 'RegistrationHead', 'ResizeFlow',
+    'UNet', 'VoxelMorph', 'GradientDiffusionLoss',
+    'GlobalMutualInformationLoss', 'MINDSSCLoss',
     'OrthonormalPropernessCondition', 'RigidDiceLoss', 'RigidFieldLoss',
     'SDlogDetJac'
 ]

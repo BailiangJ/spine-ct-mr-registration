@@ -1,18 +1,21 @@
 import os
 import sys
+
 import numpy as np
 import torch
 import wandb
 
 sys.path.append('../')
-from models import build_flow_estimator, build_loss, build_registration_head, build_metrics
-from datasets import load_train_val_data
-from monai.data import DataLoader
+from epoch_run import run_epoch
 from mmengine import Config
-from .utils import set_seed, worker_init_fn
-from .epoch_run import run_epoch
+from monai.data import DataLoader
+from utils import set_seed, worker_init_fn
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+from datasets import load_train_val_data
+from models import (build_flow_estimator, build_loss, build_metrics,
+                    build_registration_head)
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def train(config_file: str):
@@ -41,7 +44,8 @@ def train(config_file: str):
 
     # optimizer and scheduler
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=cfg.decay_rate)
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer,
+                                                          gamma=cfg.decay_rate)
 
     # loss functions
     loss_funcs = dict()
@@ -66,47 +70,35 @@ def train(config_file: str):
     train_loader = DataLoader(train_dataset,
                               batch_size=1,
                               shuffle=True,
-                              worker_init_fn=worker_init_fn
-                              )
+                              worker_init_fn=worker_init_fn)
     val_loader = DataLoader(val_dataset,
                             batch_size=1,
                             shuffle=False,
                             worker_init_fn=worker_init_fn)
 
     best_dice = 1
-    for epoch in range(cfg.start_epoch, cfg.max_epoch):
+    for epoch in range(cfg.start_epoch, cfg.max_epochs):
         if epoch % cfg.val_interval == 0 or epoch == cfg.start_epoch:
             phase = 'val'
             model.eval()
             with torch.no_grad():
-                val_dice = run_epoch(cfg,
-                                     model,
-                                     register,
-                                     val_loader,
-                                     loss_funcs,
-                                     loss_weights,
-                                     optimizer,
-                                     metric_func,
-                                     phase)
+                val_dice = run_epoch(cfg, model, register, val_loader,
+                                     loss_funcs, loss_weights, optimizer,
+                                     metric_func, phase)
 
         phase = 'train'
         model.train()
-        run_epoch(cfg,
-                  model,
-                  register,
-                  train_loader,
-                  loss_funcs,
-                  loss_weights,
-                  optimizer,
-                  metric_func,
-                  phase)
+        run_epoch(cfg, model, register, train_loader, loss_funcs, loss_weights,
+                  optimizer, metric_func, phase)
 
         lr_scheduler.step()
 
         if epoch % cfg.save_interval == 0 and epoch != 0:
-            torch.save(model.state_dict(), os.path.join(model_dir, '%04d.pth' % epoch))
+            torch.save(model.state_dict(),
+                       os.path.join(model_dir, '%04d.pth' % epoch))
 
-    torch.save(model.state_dict(), os.path.join(model_dir, '%04d.pth' % cfg.max_epochs))
+    torch.save(model.state_dict(),
+               os.path.join(model_dir, '%04d.pth' % cfg.max_epochs))
 
 
 if __name__ == '__main__':

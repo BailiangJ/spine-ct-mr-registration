@@ -1,7 +1,9 @@
-from typing import Sequence
-import torch
-import numpy as np
+import os
 import random
+from typing import Sequence
+
+import numpy as np
+import torch
 
 
 def set_seed(seed: int = 42) -> None:
@@ -18,11 +20,10 @@ def set_seed(seed: int = 42) -> None:
 
 
 def worker_init_fn(worker_id):
-    """
-    check https://github.com/Project-MONAI/MONAI/issues/1068
-    """
+    """Check https://github.com/Project-MONAI/MONAI/issues/1068."""
     worker_info = torch.utils.data.get_worker_info()
     try:
-        worker_info.dataset.transform.set_random_state(worker_info.seed % (2 ** 32))
+        worker_info.dataset.transform.set_random_state(worker_info.seed %
+                                                       (2**32))
     except AttributeError:
         pass

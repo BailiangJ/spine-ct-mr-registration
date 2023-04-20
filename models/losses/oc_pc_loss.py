@@ -51,7 +51,7 @@ class OrthonormalPropernessCondition(nn.Module):
             0.5 * spatial_filter_nd(
                 disp[:, [2], ...], kernel=self.grad_x_kernel, mode='constant')
         ],
-            dim=0)
+                            dim=0)
         grady = torch.stack([
             0.5 * spatial_filter_nd(
                 disp[:, [0], ...], kernel=self.grad_y_kernel, mode='constant'),
@@ -60,7 +60,7 @@ class OrthonormalPropernessCondition(nn.Module):
             0.5 * spatial_filter_nd(
                 disp[:, [2], ...], kernel=self.grad_y_kernel, mode='constant')
         ],
-            dim=0)
+                            dim=0)
         gradz = torch.stack([
             0.5 * spatial_filter_nd(
                 disp[:, [0], ...], kernel=self.grad_z_kernel, mode='constant'),
@@ -69,7 +69,7 @@ class OrthonormalPropernessCondition(nn.Module):
             0.5 * spatial_filter_nd(
                 disp[:, [2], ...], kernel=self.grad_z_kernel, mode='constant')
         ],
-            dim=0)
+                            dim=0)
 
         # (3,3,1,H,W,D)
         grad_disp = torch.cat([gradx, grady, gradz], dim=1)
@@ -81,9 +81,7 @@ class OrthonormalPropernessCondition(nn.Module):
 
         return grad_deform
 
-    def forward(self,
-                y_source_oh: torch.Tensor,
-                source_oh: None,
+    def forward(self, y_source_oh: torch.Tensor, source_oh: None,
                 disp_field: torch.Tensor,
                 neg_flow: None) -> Sequence[torch.Tensor]:
         """
@@ -114,7 +112,7 @@ class OrthonormalPropernessCondition(nn.Module):
                  1, 1, ...])
 
         pc = pc.squeeze()
-        E_pc = torch.sum((pc - 1) ** 2 * y_source_oh) / y_source_oh.sum()
+        E_pc = torch.sum((pc - 1)**2 * y_source_oh) / y_source_oh.sum()
 
         # compute the inner product of the Jacobian
         # which should be identity accroding to orthonormality
@@ -124,7 +122,7 @@ class OrthonormalPropernessCondition(nn.Module):
         oc = oc.flatten(start_dim=0, end_dim=1) - torch.eye(3, 3).view(
             9, 1, 1, 1, 1).to(disp_field)
         # (1,H,W,D)
-        E_oc = torch.sum(oc ** 2, dim=0)
+        E_oc = torch.sum(oc**2, dim=0)
         E_oc = E_oc.squeeze()
 
         E_oc = torch.sum(E_oc * y_source_oh) / y_source_oh.sum()

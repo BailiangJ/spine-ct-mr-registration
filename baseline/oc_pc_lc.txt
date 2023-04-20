@@ -88,4 +88,3 @@
 
 //(MovingRigidityImageName "/source_mask.nii.gz")
 (MovingRigidityImageName "/ct_mask_oh.nii.gz")
-

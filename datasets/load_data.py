@@ -6,11 +6,11 @@ import numpy as np
 import torch
 from mmengine import Config, ConfigDict
 from monai.data import CacheDataset
-from monai.transforms import (AddChanneld, CastToTyped, Compose, LoadImaged,
-                              Orientationd, RandAffined, EnsureChannelFirstd,
-                              RandCropByLabelClassesd, ResizeWithPadOrCropd,
-                              ScaleIntensityd, ScaleIntensityRanged, Spacingd,
-                              ToTensord)
+from monai.transforms import (AddChanneld, CastToTyped, Compose,
+                              EnsureChannelFirstd, LoadImaged, Orientationd,
+                              RandAffined, RandCropByLabelClassesd,
+                              ResizeWithPadOrCropd, ScaleIntensityd,
+                              ScaleIntensityRanged, Spacingd, ToTensord)
 
 from .transforms import CropForegroundd, MergeMaskd, OneHotd
 
@@ -37,7 +37,7 @@ def load_train_val_data(data_dir: str,
     """
 
     data_files = sorted(
-        glob.glob(os.path.join(data_dir, '**/ct.nii.gz'), recursive=False))
+        glob.glob(os.path.join(data_dir, 'ct.nii.gz'), recursive=False))
     dirs_list = [os.path.dirname(ct_file) for ct_file in data_files]
     data_dicts = [
         {
@@ -50,7 +50,8 @@ def load_train_val_data(data_dir: str,
 
     data_transforms = Compose([
         LoadImaged(keys=['mr', 'mr_mask', 'ct', 'ct_mask']),
-        AddChanneld(keys=['mr', 'mr_mask', 'ct', 'ct_mask']),
+        EnsureChannelFirstd(keys=['mr', 'mr_mask', 'ct', 'ct_mask'],
+                            channel_dim='no_channel'),
         Spacingd(keys=['mr', 'ct'], pixdim=(1, 1, 1), mode='bilinear'),
         Spacingd(keys=['mr_mask', 'ct_mask'], pixdim=(1, 1, 1),
                  mode='nearest'),
@@ -108,7 +109,7 @@ def load_test_data(data_dir: str, *args, **kwargs):
     """
 
     data_files = sorted(
-        glob.glob(os.path.join(data_dir, '**/ct.nii.gz'), recursive=False))
+        glob.glob(os.path.join(data_dir, 'ct.nii.gz'), recursive=False))
     dirs_list = [os.path.dirname(ct_file) for ct_file in data_files]
     data_dicts = [
         {
@@ -121,7 +122,8 @@ def load_test_data(data_dir: str, *args, **kwargs):
 
     data_transforms = Compose([
         LoadImaged(keys=['mr', 'mr_mask', 'ct', 'ct_mask']),
-        EnsureChannelFirstd(keys=['mr', 'mr_mask', 'ct', 'ct_mask'], channel_dim='no_channel'),
+        EnsureChannelFirstd(keys=['mr', 'mr_mask', 'ct', 'ct_mask'],
+                            channel_dim='no_channel'),
         Spacingd(keys=['mr', 'ct'], pixdim=(1, 1, 1), mode='bilinear'),
         Spacingd(keys=['mr_mask', 'ct_mask'], pixdim=(1, 1, 1),
                  mode='nearest'),

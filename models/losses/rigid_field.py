@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ..builder import LOSSES
-from ..utils import ResizeFlow
+from ..utils.resize_flow import ResizeFlow
 from .rigid_utils import (get_mass_center, get_reference_grid,
                           sample_correspondence, sample_displacement_flow,
                           solve_SVD)

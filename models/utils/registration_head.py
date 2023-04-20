@@ -1,10 +1,11 @@
-from typing import Sequence, Union, Optional
+from typing import Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
+
 from ..builder import REGISTRATION_HEAD
-from .resize_flow import ResizeFlow
 from .integrate import VecIntegrate
+from .resize_flow import ResizeFlow
 from .warp import Warp
 
 
@@ -21,14 +22,13 @@ class RegistrationHead(nn.Module):
         bidir (bool): whether to run bidirectional registration, only matters when int_steps>0. (Default: False)
         interp_mode (str): interpolation mode. ["nearest", "bilinear", "bicubic"]
     """
-
     def __init__(self,
                  image_size: Sequence[int],
                  int_steps: int = 0,
                  resize_scale: int = 2,
                  resize_first: bool = False,
                  bidir: bool = False,
-                 interp_mode: str = "bilinear") -> None:
+                 interp_mode: str = 'bilinear') -> None:
         super().__init__()
         if int_steps > 0:
             flow_size = [s / resize_scale for s in image_size]
@@ -41,12 +41,14 @@ class RegistrationHead(nn.Module):
         self.bidir = bidir if int_steps > 0 else False
         self.warp = Warp(image_size, interp_mode)
 
-    def forward(self,
-                vec_flow: torch.Tensor,
-                source: torch.Tensor,
-                target: torch.Tensor,
-                source_oh: Optional[torch.Tensor] = None,
-                target_oh: Optional[torch.Tensor] = None) -> Sequence[torch.Tensor]:
+    def forward(
+            self,
+            vec_flow: torch.Tensor,
+            source: torch.Tensor,
+            target: torch.Tensor,
+            source_oh: Optional[torch.Tensor] = None,
+            target_oh: Optional[torch.Tensor] = None
+    ) -> Sequence[torch.Tensor]:
         """
         Args:
             vec_flow (torch.Tensor): flow field predicted by network.
@@ -67,14 +69,27 @@ class RegistrationHead(nn.Module):
 
         if not self.resize_first:
             fwd_flow = self.resize_flow(fwd_flow)
-            bck_flow = self.resize_flow(bck_flow) if bck_flow is not None else None
+            bck_flow = self.resize_flow(
+                bck_flow) if bck_flow is not None else None
 
         # warp image with displacement field
         y_source = self.warp(source, fwd_flow)
         y_target = self.warp(target, bck_flow) if self.bidir else None
 
         # warp one-hot label with displacement field
-        y_source_oh = self.warp(source_oh, fwd_flow) if source_oh is not None else None
-        y_target_oh = self.warp(target_oh, bck_flow) if (self.bidir and target_oh is not None) else None
+        y_source_oh = self.warp(source_oh,
+                                fwd_flow) if source_oh is not None else None
+        y_target_oh = self.warp(target_oh, bck_flow) if (
+            self.bidir and target_oh is not None) else None
 
         return fwd_flow, bck_flow, y_source, y_target, y_source_oh, y_target_oh
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += (f'(image_size={self.image_size},'
+                     f'int_steps={self.int_steps},'
+                     f'resize_scale={self.resize_scale},'
+                     f'resize_first={self.resize_first},'
+                     f'bidir={self.bidir},'
+                     f'interp_mode={self.interp_mode})')
+        return repr_str
